@@ -1,0 +1,1 @@
+GitHub connection test - this file verifies that git operations are working correctly.
