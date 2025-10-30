@@ -15,14 +15,25 @@
             color: #333;
         }
         img {
-            margin-top: 20px;
+            margin: 20px 10px;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            max-width: 400px;
+        }
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
         }
     </style>
 </head>
 <body>
     <h1>Hello</h1>
-    <img src="hello-image.svg" alt="Welcome Image" width="400" height="300">
+    <div class="image-gallery">
+        <img src="hello-image.svg" alt="Welcome Image" width="400" height="300">
+        <img src="null@2x.png" alt="Null Image">
+        <img src="41aa08830cdc054ca26d42a47dd44e80.png" alt="Image">
+    </div>
 </body>
 </html>
