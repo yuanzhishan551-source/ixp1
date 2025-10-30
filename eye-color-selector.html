@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Tracking Color Selector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            cursor: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .info-panel h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .info-panel p {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .color-display {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .color-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            border: 3px solid #333;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-info {
+            flex: 1;
+        }
+
+        .color-code {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .rgb-values {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .saved-colors {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .saved-colors h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .saved-colors-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .saved-color-item {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid #333;
+            cursor: pointer;
+            transition: transform 0.2s;
+            position: relative;
+        }
+
+        .saved-color-item:hover {
+            transform: scale(1.1);
+        }
+
+        .saved-color-item .tooltip {
+            position: absolute;
+            bottom: 45px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .saved-color-item:hover .tooltip {
+            opacity: 1;
+        }
+
+        .eye-cursor {
+            position: fixed;
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+            z-index: 10000;
+            transform: translate(-50%, -50%);
+        }
+
+        .eye {
+            position: relative;
+            width: 80px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            overflow: visible;
+        }
+
+        .iris {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: background-color 0.3s ease;
+        }
+
+        .pupil {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: black;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .highlight {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background: white;
+            border-radius: 50%;
+            top: 30%;
+            left: 30%;
+        }
+
+        .eyelid-top, .eyelid-bottom {
+            position: absolute;
+            width: 100%;
+            height: 50%;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .eyelid-top {
+            top: 0;
+            border-bottom: 2px solid #333;
+        }
+
+        .eyelid-bottom {
+            bottom: 0;
+            border-top: 2px solid #333;
+        }
+
+        .instructions {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            font-size: 24px;
+            opacity: 0.7;
+            pointer-events: none;
+            z-index: 500;
+        }
+
+        .save-btn {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .save-btn:hover {
+            background: #357ABD;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .save-btn:active {
+            transform: translateY(0);
+        }
+
+        .clear-btn {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .clear-btn:hover {
+            background: #c0392b;
+        }
+
+        .coordinates {
+            font-size: 11px;
+            color: #999;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="info-panel">
+            <h1>Eye Color Selector</h1>
+            <p>Move your mouse around to select different colors. The background and eye color will change based on your position!</p>
+
+            <div class="color-display">
+                <div class="color-box" id="colorBox"></div>
+                <div class="color-info">
+                    <div class="color-code" id="hexCode">#000000</div>
+                    <div class="rgb-values" id="rgbValues">RGB(0, 0, 0)</div>
+                    <div class="coordinates" id="coordinates">X: 0, Y: 0</div>
+                </div>
+            </div>
+
+            <button class="save-btn" id="saveBtn">Save This Color</button>
+        </div>
+
+        <div class="saved-colors" id="savedColorsPanel">
+            <h3>Saved Colors</h3>
+            <div class="saved-colors-grid" id="savedColorsGrid">
+                <div style="text-align: center; grid-column: 1 / -1; color: #999; font-size: 12px;">
+                    No colors saved yet
+                </div>
+            </div>
+            <button class="clear-btn" id="clearBtn">Clear All</button>
+        </div>
+
+        <div class="instructions">
+            Move your mouse to explore colors
+        </div>
+
+        <div class="eye-cursor" id="eyeCursor">
+            <div class="eye">
+                <div class="eyelid-top"></div>
+                <div class="iris" id="iris">
+                    <div class="pupil">
+                        <div class="highlight"></div>
+                    </div>
+                </div>
+                <div class="eyelid-bottom"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const eyeCursor = document.getElementById('eyeCursor');
+        const iris = document.getElementById('iris');
+        const colorBox = document.getElementById('colorBox');
+        const hexCode = document.getElementById('hexCode');
+        const rgbValues = document.getElementById('rgbValues');
+        const coordinates = document.getElementById('coordinates');
+        const saveBtn = document.getElementById('saveBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const savedColorsGrid = document.getElementById('savedColorsGrid');
+
+        let savedColors = [];
+        let currentColor = { hex: '#000000', rgb: 'RGB(0, 0, 0)' };
+
+        // Update eye cursor position
+        document.addEventListener('mousemove', (e) => {
+            const x = e.clientX;
+            const y = e.clientY;
+
+            // Move eye cursor
+            eyeCursor.style.left = x + 'px';
+            eyeCursor.style.top = y + 'px';
+
+            // Calculate color based on position
+            const hue = (x / window.innerWidth) * 360;
+            const saturation = (y / window.innerHeight) * 100;
+            const lightness = 50 + ((x + y) / (window.innerWidth + window.innerHeight)) * 25;
+
+            const color = hslToRgb(hue, saturation, lightness);
+            const hex = rgbToHex(color.r, color.g, color.b);
+
+            // Update background
+            document.body.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+            // Update iris color
+            iris.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness - 20}%)`;
+
+            // Update color display
+            colorBox.style.backgroundColor = hex;
+            hexCode.textContent = hex;
+            rgbValues.textContent = `RGB(${color.r}, ${color.g}, ${color.b})`;
+            coordinates.textContent = `X: ${Math.round(x)}, Y: ${Math.round(y)}`;
+
+            currentColor = {
+                hex: hex,
+                rgb: `RGB(${color.r}, ${color.g}, ${color.b})`,
+                hsl: `HSL(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`
+            };
+        });
+
+        // HSL to RGB conversion
+        function hslToRgb(h, s, l) {
+            s /= 100;
+            l /= 100;
+
+            const c = (1 - Math.abs(2 * l - 1)) * s;
+            const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+            const m = l - c / 2;
+
+            let r = 0, g = 0, b = 0;
+
+            if (0 <= h && h < 60) {
+                r = c; g = x; b = 0;
+            } else if (60 <= h && h < 120) {
+                r = x; g = c; b = 0;
+            } else if (120 <= h && h < 180) {
+                r = 0; g = c; b = x;
+            } else if (180 <= h && h < 240) {
+                r = 0; g = x; b = c;
+            } else if (240 <= h && h < 300) {
+                r = x; g = 0; b = c;
+            } else if (300 <= h && h < 360) {
+                r = c; g = 0; b = x;
+            }
+
+            return {
+                r: Math.round((r + m) * 255),
+                g: Math.round((g + m) * 255),
+                b: Math.round((b + m) * 255)
+            };
+        }
+
+        // RGB to Hex conversion
+        function rgbToHex(r, g, b) {
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+        }
+
+        // Save color
+        saveBtn.addEventListener('click', () => {
+            if (!savedColors.some(c => c.hex === currentColor.hex)) {
+                savedColors.push(currentColor);
+                updateSavedColors();
+
+                // Visual feedback
+                saveBtn.textContent = 'Color Saved!';
+                setTimeout(() => {
+                    saveBtn.textContent = 'Save This Color';
+                }, 1000);
+            }
+        });
+
+        // Clear saved colors
+        clearBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all saved colors?')) {
+                savedColors = [];
+                updateSavedColors();
+            }
+        });
+
+        // Update saved colors display
+        function updateSavedColors() {
+            if (savedColors.length === 0) {
+                savedColorsGrid.innerHTML = `
+                    <div style="text-align: center; grid-column: 1 / -1; color: #999; font-size: 12px;">
+                        No colors saved yet
+                    </div>
+                `;
+                return;
+            }
+
+            savedColorsGrid.innerHTML = '';
+
+            savedColors.forEach((color, index) => {
+                const colorItem = document.createElement('div');
+                colorItem.className = 'saved-color-item';
+                colorItem.style.backgroundColor = color.hex;
+
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.textContent = color.hex;
+                colorItem.appendChild(tooltip);
+
+                colorItem.addEventListener('click', () => {
+                    copyToClipboard(color.hex);
+                    tooltip.textContent = 'Copied!';
+                    setTimeout(() => {
+                        tooltip.textContent = color.hex;
+                    }, 1000);
+                });
+
+                savedColorsGrid.appendChild(colorItem);
+            });
+        }
+
+        // Copy to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                console.log('Color copied to clipboard:', text);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Click on color code to copy
+        hexCode.addEventListener('click', () => {
+            copyToClipboard(currentColor.hex);
+            const original = hexCode.textContent;
+            hexCode.textContent = 'Copied!';
+            setTimeout(() => {
+                hexCode.textContent = original;
+            }, 1000);
+        });
+
+        // Initialize cursor position
+        eyeCursor.style.left = window.innerWidth / 2 + 'px';
+        eyeCursor.style.top = window.innerHeight / 2 + 'px';
+    </script>
+</body>
+</html>
