@@ -147,28 +147,22 @@
     <div id="interface">
         <div id="instruction">touch · speak · breathe</div>
 
-        <div class="word-cluster" style="top: 20%; left: 15%;">
-            <div class="word" data-emotion="warm" data-color="#FF8C69" data-energy="0.3">warm</div>
+        <div class="word-cluster" style="top: 30%; left: 15%;">
+            <div class="word" data-emotion="warm" data-color="#FF8C69" data-energy="0.5">warm</div>
             <div class="word" data-emotion="soft" data-color="#FFB3D9" data-energy="0.2">soft</div>
-            <div class="word" data-emotion="tender" data-color="#E6B8FF" data-energy="0.25">tender</div>
         </div>
 
-        <div class="word-cluster" style="top: 20%; right: 15%;">
-            <div class="word" data-emotion="sharp" data-color="#4ECDC4" data-energy="0.7">sharp</div>
-            <div class="word" data-emotion="electric" data-color="#45B7D1" data-energy="0.85">electric</div>
-            <div class="word" data-emotion="swift" data-color="#96CEB4" data-energy="0.75">swift</div>
+        <div class="word-cluster" style="top: 30%; right: 15%;">
+            <div class="word" data-emotion="sharp" data-color="#4ECDC4" data-energy="0.8">sharp</div>
+            <div class="word" data-emotion="bright" data-color="#FFD93D" data-energy="0.9">bright</div>
         </div>
 
-        <div class="word-cluster" style="bottom: 25%; left: 15%;">
-            <div class="word" data-emotion="deep" data-color="#6C5CE7" data-energy="0.4">deep</div>
-            <div class="word" data-emotion="still" data-color="#A29BFE" data-energy="0.15">still</div>
-            <div class="word" data-emotion="vast" data-color="#7D6EAF" data-energy="0.35">vast</div>
+        <div class="word-cluster" style="bottom: 30%; left: 15%;">
+            <div class="word" data-emotion="cold" data-color="#A29BFE" data-energy="0.15">cold</div>
         </div>
 
-        <div class="word-cluster" style="bottom: 25%; right: 15%;">
-            <div class="word" data-emotion="bright" data-color="#FFD93D" data-energy="0.8">bright</div>
-            <div class="word" data-emotion="fluid" data-color="#6BCB77" data-energy="0.5">fluid</div>
-            <div class="word" data-emotion="luminous" data-color="#FAD390" data-energy="0.65">luminous</div>
+        <div class="word-cluster" style="bottom: 30%; right: 15%;">
+            <div class="word" data-emotion="solid" data-color="#7D6EAF" data-energy="0.4">solid</div>
         </div>
 
         <div id="voice-trigger">speak</div>
@@ -407,13 +401,20 @@
                 } else {
                     // Default: generate color based on word length and complexity
                     const hue = (wordCount * 30 + transcript.length * 5) % 360;
-                    emotionalColor = this.hslToHex(hue, 70, 65);
-                    energy = Math.min(0.9, wordCount / 10);
+                    emotionalColor = this.hslToHex(hue, 80, 60);
+                    energy = Math.min(0.9, 0.4 + wordCount / 8);
                 }
 
                 this.addEmotionalLayer('voice: ' + transcript.substring(0, 30), emotionalColor, energy);
-                this.shiftColor(emotionalColor);
+
+                // Voice input has stronger color shift
+                this.shiftColorStrong(emotionalColor);
                 this.organism.energy = energy;
+
+                // Dramatically change blob sizes for voice input
+                this.organism.blobs.forEach(blob => {
+                    blob.targetRadius = 100 + (energy * 150) + (Math.random() - 0.5) * 80;
+                });
 
                 // Voice creates ripple effect
                 this.createVoiceRipple(emotionalColor);
@@ -423,17 +424,23 @@
 
             createVoiceRipple(color) {
                 const rgb = this.hexToRgb(color);
-                for (let i = 0; i < 30; i++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const speed = 2 + Math.random() * 3;
-                    this.particles.push({
-                        x: this.organism.x,
-                        y: this.organism.y,
-                        vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed,
-                        life: 1,
-                        color: rgb
-                    });
+
+                // Create multiple waves of particles for dramatic effect
+                for (let wave = 0; wave < 3; wave++) {
+                    setTimeout(() => {
+                        for (let i = 0; i < 50; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const speed = 3 + Math.random() * 5;
+                            this.particles.push({
+                                x: this.organism.x,
+                                y: this.organism.y,
+                                vx: Math.cos(angle) * speed,
+                                vy: Math.sin(angle) * speed,
+                                life: 1.5,
+                                color: rgb
+                            });
+                        }
+                    }, wave * 100);
                 }
             }
 
@@ -474,6 +481,15 @@
                 this.targetColor.r = this.lerp(this.targetColor.r, rgb.r, 0.4);
                 this.targetColor.g = this.lerp(this.targetColor.g, rgb.g, 0.4);
                 this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.4);
+            }
+
+            shiftColorStrong(hexColor) {
+                const rgb = this.hexToRgb(hexColor);
+
+                // Strong blend for voice input - much more dramatic color change
+                this.targetColor.r = this.lerp(this.targetColor.r, rgb.r, 0.85);
+                this.targetColor.g = this.lerp(this.targetColor.g, rgb.g, 0.85);
+                this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.85);
             }
 
             animate() {
