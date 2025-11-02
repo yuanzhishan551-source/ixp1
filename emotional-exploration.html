@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Emotional Exploration Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            cursor: default;
+            touch-action: none;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #interface {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .word-cluster {
+            position: absolute;
+            pointer-events: all;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .word {
+            padding: 15px 30px;
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 40px;
+            backdrop-filter: blur(10px);
+            user-select: none;
+            opacity: 0.7;
+            text-transform: lowercase;
+        }
+
+        .word:hover {
+            opacity: 1;
+            transform: scale(1.05);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .word.selected {
+            opacity: 0.95;
+            transform: scale(1.02);
+        }
+
+        #voice-trigger {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            pointer-events: all;
+            transition: all 0.4s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        #voice-trigger:hover {
+            transform: translateX(-50%) scale(1.1);
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        #voice-trigger.listening {
+            background: rgba(255, 100, 100, 0.3);
+            border-color: rgba(255, 100, 100, 0.6);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 100, 100, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(255, 100, 100, 0.6); }
+        }
+
+        @keyframes wordPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+
+        .word.pulsing {
+            animation: wordPulse 2s ease-in-out infinite;
+        }
+
+        #instruction {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 16px;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 3px;
+            pointer-events: none;
+            text-align: center;
+            opacity: 1;
+            transition: opacity 2s ease;
+        }
+
+        #instruction.hidden {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div id="interface">
+        <div id="instruction">touch · speak · breathe</div>
+
+        <div class="word-cluster" style="top: 20%; left: 15%;">
+            <div class="word" data-emotion="warm" data-color="#FF8C69" data-energy="0.3">warm</div>
+            <div class="word" data-emotion="soft" data-color="#FFB3D9" data-energy="0.2">soft</div>
+            <div class="word" data-emotion="tender" data-color="#E6B8FF" data-energy="0.25">tender</div>
+        </div>
+
+        <div class="word-cluster" style="top: 20%; right: 15%;">
+            <div class="word" data-emotion="sharp" data-color="#4ECDC4" data-energy="0.7">sharp</div>
+            <div class="word" data-emotion="electric" data-color="#45B7D1" data-energy="0.85">electric</div>
+            <div class="word" data-emotion="swift" data-color="#96CEB4" data-energy="0.75">swift</div>
+        </div>
+
+        <div class="word-cluster" style="bottom: 25%; left: 15%;">
+            <div class="word" data-emotion="deep" data-color="#6C5CE7" data-energy="0.4">deep</div>
+            <div class="word" data-emotion="still" data-color="#A29BFE" data-energy="0.15">still</div>
+            <div class="word" data-emotion="vast" data-color="#7D6EAF" data-energy="0.35">vast</div>
+        </div>
+
+        <div class="word-cluster" style="bottom: 25%; right: 15%;">
+            <div class="word" data-emotion="bright" data-color="#FFD93D" data-energy="0.8">bright</div>
+            <div class="word" data-emotion="fluid" data-color="#6BCB77" data-energy="0.5">fluid</div>
+            <div class="word" data-emotion="luminous" data-color="#FAD390" data-energy="0.65">luminous</div>
+        </div>
+
+        <div id="voice-trigger">speak</div>
+    </div>
+
+    <script>
+        // Emotional Exploration Interface
+        class EmotionalSpace {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.resizeCanvas();
+
+                // Environment state
+                this.targetColor = { r: 40, g: 35, b: 60 };
+                this.currentColor = { ...this.targetColor };
+                this.colorHistory = [{ ...this.targetColor }];
+
+                // Organic form
+                this.organism = {
+                    x: this.canvas.width / 2,
+                    y: this.canvas.height / 2,
+                    targetX: this.canvas.width / 2,
+                    targetY: this.canvas.height / 2,
+                    blobs: [],
+                    energy: 0.3,
+                    breathPhase: 0
+                };
+
+                // Initialize blobs
+                this.initializeBlobs();
+
+                // Motion trails
+                this.trails = [];
+                this.particles = [];
+
+                // Interaction state
+                this.isDragging = false;
+                this.emotionalLayers = [];
+                this.voiceActive = false;
+
+                // Time tracking
+                this.time = 0;
+                this.lastTime = performance.now();
+
+                // Setup interactions
+                this.setupInteractions();
+
+                // Start animation
+                this.animate();
+            }
+
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            initializeBlobs() {
+                const count = 8;
+                for (let i = 0; i < count; i++) {
+                    const angle = (i / count) * Math.PI * 2;
+                    this.organism.blobs.push({
+                        angle: angle,
+                        baseRadius: 120,
+                        radius: 120,
+                        targetRadius: 120,
+                        offset: Math.random() * Math.PI * 2,
+                        speed: 0.3 + Math.random() * 0.4
+                    });
+                }
+            }
+
+            setupInteractions() {
+                // Word interactions
+                document.querySelectorAll('.word').forEach(word => {
+                    word.addEventListener('click', (e) => this.onWordClick(e));
+                    word.addEventListener('mouseenter', (e) => this.onWordHover(e));
+                });
+
+                // Canvas interactions (organism manipulation)
+                this.canvas.addEventListener('mousedown', (e) => this.onPointerDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.onPointerMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.onPointerUp(e));
+
+                this.canvas.addEventListener('touchstart', (e) => this.onPointerDown(e.touches[0]), { passive: false });
+                this.canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    this.onPointerMove(e.touches[0]);
+                }, { passive: false });
+                this.canvas.addEventListener('touchend', (e) => this.onPointerUp(e));
+
+                // Voice interaction
+                document.getElementById('voice-trigger').addEventListener('click', () => this.activateVoice());
+
+                // Window resize
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            onWordClick(e) {
+                const word = e.target;
+                const color = word.dataset.color;
+                const energy = parseFloat(word.dataset.energy);
+                const emotion = word.dataset.emotion;
+
+                // Visual feedback
+                word.classList.add('selected');
+                setTimeout(() => word.classList.remove('selected'), 600);
+
+                // Update environment
+                this.addEmotionalLayer(emotion, color, energy);
+                this.shiftColor(color);
+                this.organism.energy = energy;
+
+                // Adjust blob radii based on energy
+                this.organism.blobs.forEach(blob => {
+                    blob.targetRadius = 120 + (energy * 100) + (Math.random() - 0.5) * 40;
+                });
+
+                // Create particles
+                this.createParticles(word.getBoundingClientRect(), color);
+
+                // Hide instruction after first interaction
+                document.getElementById('instruction').classList.add('hidden');
+            }
+
+            onWordHover(e) {
+                const word = e.target;
+                word.classList.add('pulsing');
+
+                const color = word.dataset.color;
+                const rgb = this.hexToRgb(color);
+
+                // Subtle color tint on hover
+                this.targetColor.r = this.lerp(this.targetColor.r, rgb.r, 0.05);
+                this.targetColor.g = this.lerp(this.targetColor.g, rgb.g, 0.05);
+                this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.05);
+
+                setTimeout(() => word.classList.remove('pulsing'), 2000);
+            }
+
+            onPointerDown(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = (e.clientX || e.pageX) - rect.left;
+                const y = (e.clientY || e.pageY) - rect.top;
+
+                const dx = x - this.organism.x;
+                const dy = y - this.organism.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < 200) {
+                    this.isDragging = true;
+                    this.organism.targetX = x;
+                    this.organism.targetY = y;
+                }
+            }
+
+            onPointerMove(e) {
+                if (!this.isDragging) return;
+
+                const rect = this.canvas.getBoundingClientRect();
+                const x = (e.clientX || e.pageX) - rect.left;
+                const y = (e.clientY || e.pageY) - rect.top;
+
+                this.organism.targetX = x;
+                this.organism.targetY = y;
+
+                // Create trail
+                this.trails.push({
+                    x: this.organism.x,
+                    y: this.organism.y,
+                    life: 1,
+                    color: { ...this.currentColor }
+                });
+            }
+
+            onPointerUp(e) {
+                this.isDragging = false;
+            }
+
+            activateVoice() {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    console.log('Speech recognition not supported');
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+
+                recognition.lang = 'en-US';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                const trigger = document.getElementById('voice-trigger');
+                trigger.classList.add('listening');
+                trigger.textContent = 'listening';
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript.toLowerCase();
+                    this.processVoiceInput(transcript);
+                };
+
+                recognition.onend = () => {
+                    trigger.classList.remove('listening');
+                    trigger.textContent = 'speak';
+                };
+
+                recognition.onerror = () => {
+                    trigger.classList.remove('listening');
+                    trigger.textContent = 'speak';
+                };
+
+                recognition.start();
+            }
+
+            processVoiceInput(transcript) {
+                // Analyze transcript for emotional content
+                const words = transcript.split(' ');
+                const wordCount = words.length;
+
+                // Determine color shift based on word analysis
+                let emotionalColor;
+                let energy = 0.5;
+
+                if (transcript.includes('calm') || transcript.includes('peace') || transcript.includes('quiet')) {
+                    emotionalColor = '#A29BFE';
+                    energy = 0.2;
+                } else if (transcript.includes('energy') || transcript.includes('excited') || transcript.includes('active')) {
+                    emotionalColor = '#FFD93D';
+                    energy = 0.9;
+                } else if (transcript.includes('sad') || transcript.includes('dark') || transcript.includes('heavy')) {
+                    emotionalColor = '#6C5CE7';
+                    energy = 0.3;
+                } else if (transcript.includes('warm') || transcript.includes('love') || transcript.includes('bright')) {
+                    emotionalColor = '#FF8C69';
+                    energy = 0.6;
+                } else {
+                    // Default: generate color based on word length and complexity
+                    const hue = (wordCount * 30 + transcript.length * 5) % 360;
+                    emotionalColor = this.hslToHex(hue, 70, 65);
+                    energy = Math.min(0.9, wordCount / 10);
+                }
+
+                this.addEmotionalLayer('voice: ' + transcript.substring(0, 30), emotionalColor, energy);
+                this.shiftColor(emotionalColor);
+                this.organism.energy = energy;
+
+                // Voice creates ripple effect
+                this.createVoiceRipple(emotionalColor);
+
+                document.getElementById('instruction').classList.add('hidden');
+            }
+
+            createVoiceRipple(color) {
+                const rgb = this.hexToRgb(color);
+                for (let i = 0; i < 30; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 3;
+                    this.particles.push({
+                        x: this.organism.x,
+                        y: this.organism.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        color: rgb
+                    });
+                }
+            }
+
+            createParticles(rect, color) {
+                const rgb = this.hexToRgb(color);
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                for (let i = 0; i < 15; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 1 + Math.random() * 2;
+                    this.particles.push({
+                        x: centerX,
+                        y: centerY,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        color: rgb
+                    });
+                }
+            }
+
+            addEmotionalLayer(name, color, energy) {
+                this.emotionalLayers.push({
+                    name,
+                    color,
+                    energy,
+                    time: this.time
+                });
+
+                this.colorHistory.push(this.hexToRgb(color));
+            }
+
+            shiftColor(hexColor) {
+                const rgb = this.hexToRgb(hexColor);
+
+                // Blend with current color
+                this.targetColor.r = this.lerp(this.targetColor.r, rgb.r, 0.4);
+                this.targetColor.g = this.lerp(this.targetColor.g, rgb.g, 0.4);
+                this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.4);
+            }
+
+            animate() {
+                const now = performance.now();
+                const deltaTime = (now - this.lastTime) / 1000;
+                this.lastTime = now;
+                this.time += deltaTime;
+
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Smooth color transition
+                this.currentColor.r = this.lerp(this.currentColor.r, this.targetColor.r, 0.02);
+                this.currentColor.g = this.lerp(this.currentColor.g, this.targetColor.g, 0.02);
+                this.currentColor.b = this.lerp(this.currentColor.b, this.targetColor.b, 0.02);
+
+                // Draw gradient background
+                this.drawGradientBackground();
+
+                // Update and draw trails
+                this.updateTrails();
+
+                // Update and draw particles
+                this.updateParticles();
+
+                // Update organism position
+                this.organism.x = this.lerp(this.organism.x, this.organism.targetX, 0.05);
+                this.organism.y = this.lerp(this.organism.y, this.organism.targetY, 0.05);
+
+                // Update breathing
+                this.organism.breathPhase += deltaTime * 0.5;
+
+                // Update blobs
+                this.updateBlobs(deltaTime);
+
+                // Draw organism
+                this.drawOrganism();
+
+                requestAnimationFrame(() => this.animate());
+            }
+
+            drawGradientBackground() {
+                const gradient = this.ctx.createRadialGradient(
+                    this.organism.x, this.organism.y, 0,
+                    this.organism.x, this.organism.y, Math.max(this.canvas.width, this.canvas.height)
+                );
+
+                const c = this.currentColor;
+                const lighter = {
+                    r: Math.min(255, c.r + 30),
+                    g: Math.min(255, c.g + 30),
+                    b: Math.min(255, c.b + 30)
+                };
+                const darker = {
+                    r: Math.max(0, c.r - 20),
+                    g: Math.max(0, c.g - 20),
+                    b: Math.max(0, c.b - 20)
+                };
+
+                gradient.addColorStop(0, `rgba(${lighter.r}, ${lighter.g}, ${lighter.b}, 1)`);
+                gradient.addColorStop(0.5, `rgba(${c.r}, ${c.g}, ${c.b}, 1)`);
+                gradient.addColorStop(1, `rgba(${darker.r}, ${darker.g}, ${darker.b}, 1)`);
+
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            updateBlobs(deltaTime) {
+                this.organism.blobs.forEach(blob => {
+                    // Breathing motion
+                    const breathe = Math.sin(this.organism.breathPhase + blob.offset) * 20 * this.organism.energy;
+
+                    // Smooth radius transition
+                    blob.radius = this.lerp(blob.radius, blob.targetRadius + breathe, 0.05);
+
+                    // Subtle rotation
+                    blob.angle += blob.speed * deltaTime * this.organism.energy * 0.1;
+                });
+            }
+
+            drawOrganism() {
+                this.ctx.save();
+                this.ctx.translate(this.organism.x, this.organism.y);
+
+                // Draw soft glow
+                const glowGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 200);
+                glowGradient.addColorStop(0, `rgba(255, 255, 255, ${0.1 * this.organism.energy})`);
+                glowGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                this.ctx.fillStyle = glowGradient;
+                this.ctx.fillRect(-200, -200, 400, 400);
+
+                // Draw organic blob shape
+                this.ctx.beginPath();
+
+                this.organism.blobs.forEach((blob, i) => {
+                    const x = Math.cos(blob.angle) * blob.radius;
+                    const y = Math.sin(blob.angle) * blob.radius;
+
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        // Calculate control points for smooth curves
+                        const prevBlob = this.organism.blobs[i - 1];
+                        const prevX = Math.cos(prevBlob.angle) * prevBlob.radius;
+                        const prevY = Math.sin(prevBlob.angle) * prevBlob.radius;
+
+                        const cpX1 = prevX + Math.cos(prevBlob.angle + Math.PI / 2) * 40;
+                        const cpY1 = prevY + Math.sin(prevBlob.angle + Math.PI / 2) * 40;
+                        const cpX2 = x - Math.cos(blob.angle + Math.PI / 2) * 40;
+                        const cpY2 = y - Math.sin(blob.angle + Math.PI / 2) * 40;
+
+                        this.ctx.bezierCurveTo(cpX1, cpY1, cpX2, cpY2, x, y);
+                    }
+                });
+
+                // Close the path
+                const firstBlob = this.organism.blobs[0];
+                const lastBlob = this.organism.blobs[this.organism.blobs.length - 1];
+                const firstX = Math.cos(firstBlob.angle) * firstBlob.radius;
+                const firstY = Math.sin(firstBlob.angle) * firstBlob.radius;
+                const lastX = Math.cos(lastBlob.angle) * lastBlob.radius;
+                const lastY = Math.sin(lastBlob.angle) * lastBlob.radius;
+
+                const cpX1 = lastX + Math.cos(lastBlob.angle + Math.PI / 2) * 40;
+                const cpY1 = lastY + Math.sin(lastBlob.angle + Math.PI / 2) * 40;
+                const cpX2 = firstX - Math.cos(firstBlob.angle + Math.PI / 2) * 40;
+                const cpY2 = firstY - Math.sin(firstBlob.angle + Math.PI / 2) * 40;
+
+                this.ctx.bezierCurveTo(cpX1, cpY1, cpX2, cpY2, firstX, firstY);
+
+                // Fill with translucent color
+                const fillColor = this.lightenColor(this.currentColor, 40);
+                this.ctx.fillStyle = `rgba(${fillColor.r}, ${fillColor.g}, ${fillColor.b}, 0.3)`;
+                this.ctx.fill();
+
+                // Stroke with brighter color
+                const strokeColor = this.lightenColor(this.currentColor, 80);
+                this.ctx.strokeStyle = `rgba(${strokeColor.r}, ${strokeColor.g}, ${strokeColor.b}, 0.5)`;
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            }
+
+            updateTrails() {
+                this.trails = this.trails.filter(trail => {
+                    trail.life -= 0.02;
+
+                    if (trail.life > 0) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(trail.x, trail.y, 5 * trail.life, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(${trail.color.r}, ${trail.color.g}, ${trail.color.b}, ${trail.life * 0.3})`;
+                        this.ctx.fill();
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
+            updateParticles() {
+                this.particles = this.particles.filter(particle => {
+                    particle.x += particle.vx;
+                    particle.y += particle.vy;
+                    particle.life -= 0.015;
+                    particle.vy += 0.1; // Gentle gravity
+
+                    if (particle.life > 0) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(particle.x, particle.y, 3 * particle.life, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(${particle.color.r}, ${particle.color.g}, ${particle.color.b}, ${particle.life * 0.6})`;
+                        this.ctx.fill();
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
+            // Utility functions
+            lerp(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            hexToRgb(hex) {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : { r: 0, g: 0, b: 0 };
+            }
+
+            hslToHex(h, s, l) {
+                l /= 100;
+                const a = s * Math.min(l, 1 - l) / 100;
+                const f = n => {
+                    const k = (n + h / 30) % 12;
+                    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                    return Math.round(255 * color).toString(16).padStart(2, '0');
+                };
+                return `#${f(0)}${f(8)}${f(4)}`;
+            }
+
+            lightenColor(color, amount) {
+                return {
+                    r: Math.min(255, color.r + amount),
+                    g: Math.min(255, color.g + amount),
+                    b: Math.min(255, color.b + amount)
+                };
+            }
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => new EmotionalSpace());
+        } else {
+            new EmotionalSpace();
+        }
+    </script>
+</body>
+</html>
