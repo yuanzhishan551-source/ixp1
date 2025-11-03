@@ -73,45 +73,6 @@
             transform: scale(1.02);
         }
 
-        #voice-trigger {
-            position: absolute;
-            bottom: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            cursor: pointer;
-            pointer-events: all;
-            transition: all 0.4s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: 300;
-            letter-spacing: 1px;
-        }
-
-        #voice-trigger:hover {
-            transform: translateX(-50%) scale(1.1);
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        #voice-trigger.listening {
-            background: rgba(255, 100, 100, 0.3);
-            border-color: rgba(255, 100, 100, 0.6);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 20px rgba(255, 100, 100, 0.3); }
-            50% { box-shadow: 0 0 40px rgba(255, 100, 100, 0.6); }
-        }
-
         @keyframes wordPulse {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.03); }
@@ -164,8 +125,6 @@
         <div class="word-cluster" style="bottom: 30%; right: 15%;">
             <div class="word" data-emotion="solid" data-color="#7D6EAF" data-energy="0.4">solid</div>
         </div>
-
-        <div id="voice-trigger">speak</div>
     </div>
 
     <script>
@@ -202,10 +161,12 @@
                 // Interaction state
                 this.isDragging = false;
                 this.emotionalLayers = [];
-                this.voiceActive = false;
-                this.recognition = null;
-                this.voiceFlashIntensity = 0;
-                this.voiceFlashColor = { r: 255, g: 255, b: 255 };
+
+                // Long press state
+                this.isLongPressing = false;
+                this.longPressTimer = null;
+                this.longPressStartTime = 0;
+                this.curvatureIntensity = 40; // Base curvature control point distance
 
                 // Time tracking
                 this.time = 0;
@@ -256,9 +217,6 @@
                     this.onPointerMove(e.touches[0]);
                 }, { passive: false });
                 this.canvas.addEventListener('touchend', (e) => this.onPointerUp(e));
-
-                // Voice interaction
-                document.getElementById('voice-trigger').addEventListener('click', () => this.activateVoice());
 
                 // Window resize
                 window.addEventListener('resize', () => this.resizeCanvas());
@@ -319,18 +277,51 @@
                     this.isDragging = true;
                     this.organism.targetX = x;
                     this.organism.targetY = y;
+                    this.longPressStartTime = performance.now();
+
+                    // Start long press timer
+                    this.longPressTimer = setTimeout(() => {
+                        this.isLongPressing = true;
+                        this.isDragging = false; // Stop dragging when long press activates
+                    }, 500); // 500ms to activate long press
                 }
             }
 
             onPointerMove(e) {
-                if (!this.isDragging) return;
-
                 const rect = this.canvas.getBoundingClientRect();
                 const x = (e.clientX || e.pageX) - rect.left;
                 const y = (e.clientY || e.pageY) - rect.top;
 
+                if (this.isLongPressing) {
+                    // Long press mode: change curvature based on mouse movement
+                    const dx = x - this.organism.x;
+                    const dy = y - this.organism.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Map distance to curvature (0 to 200 pixels -> 10 to 150 curvature)
+                    this.curvatureIntensity = Math.max(10, Math.min(150, 40 + distance * 0.5));
+
+                    return;
+                }
+
+                if (!this.isDragging) return;
+
                 this.organism.targetX = x;
                 this.organism.targetY = y;
+
+                // Cancel long press if moved too much while waiting
+                if (this.longPressTimer) {
+                    const timeSinceDown = performance.now() - this.longPressStartTime;
+                    if (timeSinceDown < 500) {
+                        const dx = x - this.organism.targetX;
+                        const dy = y - this.organism.targetY;
+                        const moveDist = Math.sqrt(dx * dx + dy * dy);
+                        if (moveDist > 20) {
+                            clearTimeout(this.longPressTimer);
+                            this.longPressTimer = null;
+                        }
+                    }
+                }
 
                 // Create trail
                 this.trails.push({
@@ -343,165 +334,11 @@
 
             onPointerUp(e) {
                 this.isDragging = false;
-            }
+                this.isLongPressing = false;
 
-            activateVoice() {
-                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                    console.log('Speech recognition not supported');
-                    return;
-                }
-
-                const trigger = document.getElementById('voice-trigger');
-
-                // If already listening, stop the recognition
-                if (this.recognition && this.voiceActive) {
-                    try {
-                        this.recognition.stop();
-                    } catch (e) {
-                        console.log('Error stopping recognition:', e);
-                    }
-                    this.voiceActive = false;
-                    this.recognition = null;
-                    trigger.classList.remove('listening');
-                    trigger.textContent = 'speak';
-                    return;
-                }
-
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                this.recognition = new SpeechRecognition();
-
-                this.recognition.lang = 'en-US';
-                this.recognition.continuous = false;
-                this.recognition.interimResults = false;
-
-                this.voiceActive = true;
-                trigger.classList.add('listening');
-                trigger.textContent = 'listening';
-
-                this.recognition.onresult = (event) => {
-                    const transcript = event.results[0][0].transcript.toLowerCase();
-                    this.processVoiceInput(transcript);
-                };
-
-                this.recognition.onend = () => {
-                    this.voiceActive = false;
-                    this.recognition = null;
-                    trigger.classList.remove('listening');
-                    trigger.textContent = 'speak';
-                };
-
-                this.recognition.onerror = (event) => {
-                    console.log('Recognition error:', event.error);
-                    this.voiceActive = false;
-                    this.recognition = null;
-                    trigger.classList.remove('listening');
-                    trigger.textContent = 'speak';
-                };
-
-                try {
-                    this.recognition.start();
-                } catch (e) {
-                    console.log('Error starting recognition:', e);
-                    this.voiceActive = false;
-                    this.recognition = null;
-                    trigger.classList.remove('listening');
-                    trigger.textContent = 'speak';
-                }
-            }
-
-            processVoiceInput(transcript) {
-                // Analyze transcript for emotional content
-                const words = transcript.split(' ');
-                const wordCount = words.length;
-
-                // Determine color shift based on word analysis
-                let emotionalColor;
-                let energy = 0.5;
-
-                if (transcript.includes('calm') || transcript.includes('peace') || transcript.includes('quiet')) {
-                    emotionalColor = '#A29BFE';
-                    energy = 0.2;
-                } else if (transcript.includes('energy') || transcript.includes('excited') || transcript.includes('active')) {
-                    emotionalColor = '#FFD93D';
-                    energy = 0.9;
-                } else if (transcript.includes('sad') || transcript.includes('dark') || transcript.includes('heavy')) {
-                    emotionalColor = '#6C5CE7';
-                    energy = 0.3;
-                } else if (transcript.includes('warm') || transcript.includes('love') || transcript.includes('bright')) {
-                    emotionalColor = '#FF8C69';
-                    energy = 0.6;
-                } else {
-                    // Default: generate color based on word length and complexity
-                    const hue = (wordCount * 30 + transcript.length * 5) % 360;
-                    emotionalColor = this.hslToHex(hue, 90, 55);
-                    energy = Math.min(0.9, 0.4 + wordCount / 8);
-                }
-
-                this.addEmotionalLayer('voice: ' + transcript.substring(0, 30), emotionalColor, energy);
-
-                // DRAMATICALLY stronger color shift - almost instant change
-                const rgb = this.hexToRgb(emotionalColor);
-                this.currentColor = { ...rgb };  // Instant color change!
-                this.targetColor = { ...rgb };
-
-                this.organism.energy = energy;
-
-                // Trigger massive screen flash
-                this.voiceFlashIntensity = 1.0;
-                this.voiceFlashColor = rgb;
-
-                // Dramatically change blob sizes for voice input
-                this.organism.blobs.forEach((blob, i) => {
-                    blob.targetRadius = 80 + (energy * 180) + (Math.random() - 0.5) * 100;
-                    // Make each blob move at different speeds for more chaotic effect
-                    blob.speed = 0.5 + Math.random() * 1.5;
-                });
-
-                // Move organism to create movement
-                this.organism.targetX = this.canvas.width / 2 + (Math.random() - 0.5) * 200;
-                this.organism.targetY = this.canvas.height / 2 + (Math.random() - 0.5) * 200;
-
-                // Voice creates MASSIVE ripple effect
-                this.createVoiceRipple(emotionalColor);
-
-                document.getElementById('instruction').classList.add('hidden');
-            }
-
-            createVoiceRipple(color) {
-                const rgb = this.hexToRgb(color);
-
-                // Create MASSIVE waves of particles for extremely dramatic effect
-                for (let wave = 0; wave < 5; wave++) {
-                    setTimeout(() => {
-                        for (let i = 0; i < 80; i++) {
-                            const angle = Math.random() * Math.PI * 2;
-                            const speed = 4 + Math.random() * 8;
-                            this.particles.push({
-                                x: this.organism.x,
-                                y: this.organism.y,
-                                vx: Math.cos(angle) * speed,
-                                vy: Math.sin(angle) * speed,
-                                life: 2.0,
-                                color: rgb,
-                                size: 2 + Math.random() * 4
-                            });
-                        }
-                    }, wave * 80);
-                }
-
-                // Add extra large particles for emphasis
-                for (let i = 0; i < 20; i++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const speed = 2 + Math.random() * 4;
-                    this.particles.push({
-                        x: this.organism.x,
-                        y: this.organism.y,
-                        vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed,
-                        life: 2.5,
-                        color: rgb,
-                        size: 8 + Math.random() * 8
-                    });
+                if (this.longPressTimer) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
                 }
             }
 
@@ -545,15 +382,6 @@
                 this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.4);
             }
 
-            shiftColorStrong(hexColor) {
-                const rgb = this.hexToRgb(hexColor);
-
-                // Strong blend for voice input - much more dramatic color change
-                this.targetColor.r = this.lerp(this.targetColor.r, rgb.r, 0.85);
-                this.targetColor.g = this.lerp(this.targetColor.g, rgb.g, 0.85);
-                this.targetColor.b = this.lerp(this.targetColor.b, rgb.b, 0.85);
-            }
-
             animate() {
                 const now = performance.now();
                 const deltaTime = (now - this.lastTime) / 1000;
@@ -570,14 +398,6 @@
 
                 // Draw gradient background
                 this.drawGradientBackground();
-
-                // Draw voice flash effect
-                if (this.voiceFlashIntensity > 0) {
-                    this.ctx.fillStyle = `rgba(${this.voiceFlashColor.r}, ${this.voiceFlashColor.g}, ${this.voiceFlashColor.b}, ${this.voiceFlashIntensity * 0.4})`;
-                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                    this.voiceFlashIntensity -= deltaTime * 2; // Fade out quickly
-                    if (this.voiceFlashIntensity < 0) this.voiceFlashIntensity = 0;
-                }
 
                 // Update and draw trails
                 this.updateTrails();
@@ -666,10 +486,10 @@
                         const prevX = Math.cos(prevBlob.angle) * prevBlob.radius;
                         const prevY = Math.sin(prevBlob.angle) * prevBlob.radius;
 
-                        const cpX1 = prevX + Math.cos(prevBlob.angle + Math.PI / 2) * 40;
-                        const cpY1 = prevY + Math.sin(prevBlob.angle + Math.PI / 2) * 40;
-                        const cpX2 = x - Math.cos(blob.angle + Math.PI / 2) * 40;
-                        const cpY2 = y - Math.sin(blob.angle + Math.PI / 2) * 40;
+                        const cpX1 = prevX + Math.cos(prevBlob.angle + Math.PI / 2) * this.curvatureIntensity;
+                        const cpY1 = prevY + Math.sin(prevBlob.angle + Math.PI / 2) * this.curvatureIntensity;
+                        const cpX2 = x - Math.cos(blob.angle + Math.PI / 2) * this.curvatureIntensity;
+                        const cpY2 = y - Math.sin(blob.angle + Math.PI / 2) * this.curvatureIntensity;
 
                         this.ctx.bezierCurveTo(cpX1, cpY1, cpX2, cpY2, x, y);
                     }
@@ -683,10 +503,10 @@
                 const lastX = Math.cos(lastBlob.angle) * lastBlob.radius;
                 const lastY = Math.sin(lastBlob.angle) * lastBlob.radius;
 
-                const cpX1 = lastX + Math.cos(lastBlob.angle + Math.PI / 2) * 40;
-                const cpY1 = lastY + Math.sin(lastBlob.angle + Math.PI / 2) * 40;
-                const cpX2 = firstX - Math.cos(firstBlob.angle + Math.PI / 2) * 40;
-                const cpY2 = firstY - Math.sin(firstBlob.angle + Math.PI / 2) * 40;
+                const cpX1 = lastX + Math.cos(lastBlob.angle + Math.PI / 2) * this.curvatureIntensity;
+                const cpY1 = lastY + Math.sin(lastBlob.angle + Math.PI / 2) * this.curvatureIntensity;
+                const cpX2 = firstX - Math.cos(firstBlob.angle + Math.PI / 2) * this.curvatureIntensity;
+                const cpY2 = firstY - Math.sin(firstBlob.angle + Math.PI / 2) * this.curvatureIntensity;
 
                 this.ctx.bezierCurveTo(cpX1, cpY1, cpX2, cpY2, firstX, firstY);
 
@@ -700,6 +520,19 @@
                 this.ctx.strokeStyle = `rgba(${strokeColor.r}, ${strokeColor.g}, ${strokeColor.b}, 0.5)`;
                 this.ctx.lineWidth = 3;
                 this.ctx.stroke();
+
+                // Visual feedback for long press mode
+                if (this.isLongPressing) {
+                    // Draw pulsing ring to indicate curvature editing mode
+                    const pulseSize = Math.sin(this.time * 3) * 10 + 150;
+                    this.ctx.beginPath();
+                    this.ctx.arc(0, 0, pulseSize, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(this.time * 3) * 0.2})`;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.setLineDash([5, 5]);
+                    this.ctx.stroke();
+                    this.ctx.setLineDash([]);
+                }
 
                 this.ctx.restore();
             }
