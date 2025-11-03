@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Emotional Space Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+            background: #F5F3F0;
+            touch-action: none;
+            position: fixed;
+        }
+
+        /* Word tiles strip at top */
+        .word-container {
+            position: fixed;
+            top: env(safe-area-inset-top, 20px);
+            left: 12px;
+            right: 12px;
+            height: 56px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            z-index: 100;
+            padding: 4px 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .word-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .word-tile {
+            min-width: 80px;
+            height: 44px;
+            padding: 0 18px;
+            border-radius: 22px;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+            scroll-snap-align: start;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: all 180ms cubic-bezier(0.19, 1, 0.22, 1);
+            flex-shrink: 0;
+            color: #333;
+        }
+
+        .word-tile:active {
+            transform: scale(0.98) translateY(1px);
+        }
+
+        .word-tile.selected {
+            transform: translateY(2px);
+            box-shadow: 0 0 12px var(--word-color);
+        }
+
+        /* Blob canvas */
+        #blob-canvas {
+            position: fixed;
+            top: calc(env(safe-area-inset-top, 20px) + 76px);
+            bottom: calc(env(safe-area-inset-bottom, 20px) + 96px);
+            left: 0;
+            right: 0;
+            touch-action: none;
+            z-index: 1;
+        }
+
+        /* Action bar at bottom */
+        .action-bar {
+            position: fixed;
+            bottom: env(safe-area-inset-bottom, 20px);
+            left: 16px;
+            right: 16px;
+            height: 76px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+            gap: 12px;
+        }
+
+        .generate-button {
+            flex: 1;
+            max-width: 200px;
+            height: 56px;
+            border-radius: 28px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+            transition: all 300ms cubic-bezier(0.19, 1, 0.22, 1);
+            letter-spacing: 0.5px;
+        }
+
+        .generate-button:active {
+            transform: scale(0.96);
+        }
+
+        .generate-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .control-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 24px;
+            border: none;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 200ms ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-button:active {
+            transform: scale(0.9);
+        }
+
+        .history-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            backdrop-filter: blur(8px);
+            align-items: center;
+        }
+
+        .history-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.3);
+            transition: all 200ms ease;
+        }
+
+        .history-dot.active {
+            background: #667eea;
+            transform: scale(1.3);
+        }
+
+        /* Gesture feedback overlay */
+        .gesture-feedback {
+            position: fixed;
+            top: calc(env(safe-area-inset-top, 20px) + 76px);
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 200ms ease;
+            pointer-events: none;
+        }
+
+        .gesture-feedback.show {
+            opacity: 1;
+        }
+
+        /* Generation modal */
+        .generation-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 400ms ease;
+        }
+
+        .generation-modal.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .generation-content {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #output-canvas {
+            width: 100%;
+            border-radius: 12px;
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .modal-button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 200ms ease;
+        }
+
+        .modal-button.primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .modal-button.secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .modal-button:active {
+            transform: scale(0.97);
+        }
+
+        /* Particles for visual feedback */
+        .particle {
+            position: fixed;
+            pointer-events: none;
+            z-index: 50;
+            border-radius: 50%;
+        }
+
+        /* Loading animation */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+
+        .generating {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        /* Hint text */
+        .hint-text {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(0, 0, 0, 0.2);
+            font-size: 18px;
+            letter-spacing: 2px;
+            pointer-events: none;
+            z-index: 0;
+            text-align: center;
+            opacity: 1;
+            transition: opacity 600ms ease;
+        }
+
+        .hint-text.hidden {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Word tiles -->
+    <div class="word-container" id="wordContainer">
+        <div class="word-tile" data-word="warm" data-color="#D4A574" data-texture="viscous">warm</div>
+        <div class="word-tile" data-word="cool" data-color="#6B7C8E" data-texture="crisp">cool</div>
+        <div class="word-tile" data-word="soft" data-color="#C2D4DD" data-texture="blur">soft</div>
+        <div class="word-tile" data-word="sharp" data-color="#00A8B8" data-texture="angular">sharp</div>
+        <div class="word-tile" data-word="heavy" data-color="#4A4A4A" data-texture="dense">heavy</div>
+        <div class="word-tile" data-word="light" data-color="#EBE4D8" data-texture="airy">light</div>
+        <div class="word-tile" data-word="rough" data-color="#C17B5C" data-texture="granular">rough</div>
+        <div class="word-tile" data-word="smooth" data-color="#E3C4C4" data-texture="glossy">smooth</div>
+    </div>
+
+    <!-- Blob canvas -->
+    <canvas id="blob-canvas"></canvas>
+
+    <!-- Hint text -->
+    <div class="hint-text" id="hintText">
+        select words · touch the blob · create
+    </div>
+
+    <!-- Action bar -->
+    <div class="action-bar">
+        <button class="control-button" id="undoButton" title="Undo">↻</button>
+        <button class="generate-button" id="generateButton" disabled>Generate</button>
+        <div class="history-indicator" id="historyIndicator">
+            <div class="history-dot"></div>
+            <div class="history-dot"></div>
+            <div class="history-dot"></div>
+        </div>
+    </div>
+
+    <!-- Gesture feedback -->
+    <div class="gesture-feedback" id="gestureFeedback"></div>
+
+    <!-- Generation modal -->
+    <div class="generation-modal" id="generationModal">
+        <div class="generation-content">
+            <h2 style="margin-bottom: 12px; color: #333;">Your Emotional Composition</h2>
+            <canvas id="output-canvas" width="1080" height="1920"></canvas>
+            <div class="modal-buttons">
+                <button class="modal-button secondary" id="closeModal">Close</button>
+                <button class="modal-button primary" id="downloadButton">Download</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class EmotionalExplorer {
+            constructor() {
+                this.canvas = document.getElementById('blob-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.resizeCanvas();
+
+                // Session state
+                this.events = [];
+                this.selectedWords = new Set();
+                this.sessionId = Date.now();
+
+                // Blob state
+                this.blob = {
+                    x: 0.5,
+                    y: 0.5,
+                    baseRadius: 0.15,
+                    density: 1.0,
+                    vertices: 12,
+                    points: [],
+                    flowField: [],
+                    colors: []
+                };
+
+                this.initBlob();
+
+                // Interaction state
+                this.touchStart = null;
+                this.touchPath = [];
+                this.lastTouch = null;
+                this.gestureStartTime = 0;
+                this.isPinching = false;
+                this.initialPinchDistance = 0;
+
+                // Visual state
+                this.backgroundColor = { r: 245, g: 243, b: 240 };
+                this.particles = [];
+                this.time = 0;
+
+                this.setupEventListeners();
+                this.animate();
+            }
+
+            resizeCanvas() {
+                this.canvas.width = this.canvas.offsetWidth;
+                this.canvas.height = this.canvas.offsetHeight;
+            }
+
+            initBlob() {
+                this.blob.points = [];
+                for (let i = 0; i < this.blob.vertices; i++) {
+                    const angle = (i / this.blob.vertices) * Math.PI * 2;
+                    this.blob.points.push({
+                        angle,
+                        radius: this.blob.baseRadius,
+                        targetRadius: this.blob.baseRadius,
+                        noiseOffset: Math.random() * 100
+                    });
+                }
+                this.blob.colors = [{ r: 200, g: 200, b: 220, a: 0.3 }];
+            }
+
+            setupEventListeners() {
+                // Word tile clicks
+                document.querySelectorAll('.word-tile').forEach(tile => {
+                    tile.addEventListener('click', (e) => this.onWordSelect(e));
+                });
+
+                // Canvas touch gestures
+                this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+                this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+                this.canvas.addEventListener('touchend', (e) => this.onTouchEnd(e), { passive: false });
+
+                // Mouse gestures (for desktop testing)
+                this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+
+                // Control buttons
+                document.getElementById('undoButton').addEventListener('click', () => this.undo());
+                document.getElementById('generateButton').addEventListener('click', () => this.generate());
+                document.getElementById('closeModal').addEventListener('click', () => this.closeModal());
+                document.getElementById('downloadButton').addEventListener('click', () => this.download());
+
+                // Window resize
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            // Word selection
+            onWordSelect(e) {
+                const tile = e.currentTarget;
+                const word = tile.dataset.word;
+                const color = tile.dataset.color;
+                const texture = tile.dataset.texture;
+
+                const isSelected = this.selectedWords.has(word);
+
+                if (isSelected) {
+                    this.selectedWords.delete(word);
+                    tile.classList.remove('selected');
+                    tile.style.background = 'rgba(255, 255, 255, 0.4)';
+                    tile.style.border = '1px solid rgba(0, 0, 0, 0.08)';
+                } else {
+                    this.selectedWords.add(word);
+                    tile.classList.add('selected');
+                    tile.style.setProperty('--word-color', color + '60');
+                    tile.style.background = color + '33';
+                    tile.style.border = `2px solid ${color}99`;
+
+                    // Add to blob colors
+                    const rgb = this.hexToRgb(color);
+                    this.blob.colors.push({ ...rgb, a: 0.4 });
+
+                    // Create particles
+                    this.createParticles(
+                        tile.offsetLeft + tile.offsetWidth / 2,
+                        tile.offsetTop + tile.offsetHeight / 2,
+                        rgb
+                    );
+                }
+
+                this.logEvent({
+                    type: 'word_select',
+                    data: { word, selected: !isSelected, color, texture }
+                });
+
+                this.updateUI();
+                document.getElementById('hintText').classList.add('hidden');
+            }
+
+            // Touch gesture detection
+            onTouchStart(e) {
+                e.preventDefault();
+
+                if (e.touches.length === 1) {
+                    // Single touch
+                    const touch = e.touches[0];
+                    const pos = this.getTouchPos(touch);
+
+                    this.touchStart = { ...pos, time: Date.now() };
+                    this.gestureStartTime = Date.now();
+                    this.touchPath = [pos];
+                    this.lastTouch = pos;
+                } else if (e.touches.length === 2) {
+                    // Two-finger pinch
+                    this.isPinching = true;
+                    const dist = this.getTouchDistance(e.touches[0], e.touches[1]);
+                    this.initialPinchDistance = dist;
+                }
+            }
+
+            onTouchMove(e) {
+                e.preventDefault();
+
+                if (this.isPinching && e.touches.length === 2) {
+                    const currentDist = this.getTouchDistance(e.touches[0], e.touches[1]);
+                    const scale = currentDist / this.initialPinchDistance;
+                    this.blob.density *= (1 + (scale - 1) * 0.1);
+                    this.blob.density = Math.max(0.5, Math.min(1.5, this.blob.density));
+                    this.initialPinchDistance = currentDist;
+                } else if (e.touches.length === 1 && this.touchStart) {
+                    const touch = e.touches[0];
+                    const pos = this.getTouchPos(touch);
+                    this.touchPath.push(pos);
+                    this.lastTouch = pos;
+
+                    // Update blob position during drag
+                    this.blob.x = pos.x;
+                    this.blob.y = pos.y;
+                }
+            }
+
+            onTouchEnd(e) {
+                e.preventDefault();
+
+                if (this.isPinching) {
+                    this.logEvent({
+                        type: 'pinch',
+                        data: {
+                            scaleChange: this.blob.density,
+                            densityDelta: this.blob.density - 1.0
+                        }
+                    });
+                    this.showGestureFeedback('pinch');
+                    this.isPinching = false;
+                    this.updateUI();
+                    return;
+                }
+
+                if (!this.touchStart || !this.lastTouch) return;
+
+                const duration = Date.now() - this.gestureStartTime;
+                const distance = this.getDistance(this.touchStart, this.lastTouch);
+                const velocity = distance / (duration / 1000);
+
+                // Classify gesture
+                if (duration > 400 && distance < 20) {
+                    // Press & hold
+                    this.handlePress(this.touchStart, duration);
+                } else if (distance < 10 && duration < 150) {
+                    // Tap / poke
+                    this.handlePoke(this.touchStart);
+                } else if (velocity > 600) {
+                    // Flick
+                    this.handleFlick(this.touchStart, this.lastTouch, velocity);
+                } else if (distance > 40 && velocity < 300) {
+                    // Caress / brush
+                    this.handleCaress(this.touchPath, duration);
+                }
+
+                // Reset
+                this.touchStart = null;
+                this.touchPath = [];
+                this.lastTouch = null;
+            }
+
+            // Mouse events (desktop)
+            onMouseDown(e) {
+                const pos = this.getMousePos(e);
+                this.touchStart = { ...pos, time: Date.now() };
+                this.gestureStartTime = Date.now();
+                this.touchPath = [pos];
+                this.lastTouch = pos;
+            }
+
+            onMouseMove(e) {
+                if (!this.touchStart) return;
+                const pos = this.getMousePos(e);
+                this.touchPath.push(pos);
+                this.lastTouch = pos;
+                this.blob.x = pos.x;
+                this.blob.y = pos.y;
+            }
+
+            onMouseUp(e) {
+                if (!this.touchStart) return;
+
+                const duration = Date.now() - this.gestureStartTime;
+                const distance = this.getDistance(this.touchStart, this.lastTouch);
+                const velocity = distance / (duration / 1000);
+
+                if (duration > 400 && distance < 20) {
+                    this.handlePress(this.touchStart, duration);
+                } else if (distance < 10 && duration < 150) {
+                    this.handlePoke(this.touchStart);
+                } else if (velocity > 600) {
+                    this.handleFlick(this.touchStart, this.lastTouch, velocity);
+                } else if (distance > 40) {
+                    this.handleCaress(this.touchPath, duration);
+                }
+
+                this.touchStart = null;
+                this.touchPath = [];
+            }
+
+            // Gesture handlers
+            handleCaress(path, duration) {
+                if (path.length < 2) return;
+
+                const start = path[0];
+                const end = path[path.length - 1];
+                const direction = this.normalize(end.x - start.x, end.y - start.y);
+                const pathLength = this.getPathLength(path);
+
+                this.blob.points.forEach((point, i) => {
+                    const stretch = 1.1 + Math.random() * 0.1;
+                    point.targetRadius = this.blob.baseRadius * stretch;
+                });
+
+                this.logEvent({
+                    type: 'caress',
+                    data: {
+                        direction: [direction.x, direction.y],
+                        intensity: Math.min(1, pathLength / 200),
+                        duration,
+                        pathLength: Math.round(pathLength)
+                    }
+                });
+
+                this.showGestureFeedback('caress');
+                this.updateUI();
+            }
+
+            handlePoke(pos) {
+                // Create ripple effect
+                this.blob.points.forEach((point, i) => {
+                    point.targetRadius = this.blob.baseRadius * (0.9 + Math.random() * 0.2);
+                });
+
+                this.logEvent({
+                    type: 'poke',
+                    data: {
+                        position: [pos.x, pos.y],
+                        intensity: 1.0
+                    }
+                });
+
+                this.showGestureFeedback('poke');
+                this.updateUI();
+            }
+
+            handlePress(pos, duration) {
+                this.blob.points.forEach(point => {
+                    point.targetRadius = this.blob.baseRadius * 0.85;
+                });
+
+                this.logEvent({
+                    type: 'press',
+                    data: {
+                        position: [pos.x, pos.y],
+                        duration,
+                        pressure: Math.min(1, duration / 1500)
+                    }
+                });
+
+                this.showGestureFeedback('press');
+                this.updateUI();
+            }
+
+            handleFlick(start, end, velocity) {
+                const direction = this.normalize(end.x - start.x, end.y - start.y);
+
+                this.blob.points.forEach((point, i) => {
+                    point.targetRadius = this.blob.baseRadius * (1.2 + Math.random() * 0.3);
+                });
+
+                // Create energy particles
+                const rgb = this.blob.colors[this.blob.colors.length - 1] || { r: 200, g: 200, b: 220 };
+                for (let i = 0; i < 20; i++) {
+                    this.particles.push({
+                        x: this.blob.x * this.canvas.width,
+                        y: this.blob.y * this.canvas.height,
+                        vx: direction.x * (velocity / 100) + (Math.random() - 0.5) * 2,
+                        vy: direction.y * (velocity / 100) + (Math.random() - 0.5) * 2,
+                        life: 1,
+                        size: 3 + Math.random() * 3,
+                        color: rgb
+                    });
+                }
+
+                this.logEvent({
+                    type: 'flick',
+                    data: {
+                        direction: [direction.x, direction.y],
+                        velocity: Math.round(velocity),
+                        energy: Math.min(1, velocity / 1000)
+                    }
+                });
+
+                this.showGestureFeedback('flick');
+                this.updateUI();
+            }
+
+            // UI updates
+            updateUI() {
+                const hasInteractions = this.events.length > 0;
+                document.getElementById('generateButton').disabled = !hasInteractions;
+
+                // Update history dots
+                const dots = document.querySelectorAll('.history-dot');
+                const recentEvents = Math.min(this.events.length, dots.length);
+                dots.forEach((dot, i) => {
+                    if (i < recentEvents) {
+                        dot.classList.add('active');
+                    } else {
+                        dot.classList.remove('active');
+                    }
+                });
+            }
+
+            showGestureFeedback(gesture) {
+                const feedback = document.getElementById('gestureFeedback');
+                feedback.textContent = gesture;
+                feedback.classList.add('show');
+                setTimeout(() => feedback.classList.remove('show'), 1000);
+            }
+
+            undo() {
+                if (this.events.length === 0) return;
+                this.events.pop();
+                this.updateUI();
+            }
+
+            // Generate geometry
+            async generate() {
+                const modal = document.getElementById('generationModal');
+                const outputCanvas = document.getElementById('output-canvas');
+                const ctx = outputCanvas.getContext('2d');
+
+                modal.classList.add('show');
+                document.getElementById('generateButton').classList.add('generating');
+
+                // Extract features
+                const features = this.extractFeatures();
+
+                // Wait a bit for effect
+                await new Promise(resolve => setTimeout(resolve, 800));
+
+                // Generate geometry
+                this.generateGeometry(ctx, features);
+
+                document.getElementById('generateButton').classList.remove('generating');
+            }
+
+            extractFeatures() {
+                const gestureCounts = {};
+                let totalIntensity = 0;
+                let directionX = 0, directionY = 0;
+                let directionalCount = 0;
+
+                this.events.forEach(event => {
+                    if (event.type !== 'word_select') {
+                        gestureCounts[event.type] = (gestureCounts[event.type] || 0) + 1;
+
+                        if (event.data.intensity) {
+                            totalIntensity += event.data.intensity;
+                        }
+
+                        if (event.data.direction) {
+                            directionX += event.data.direction[0];
+                            directionY += event.data.direction[1];
+                            directionalCount++;
+                        }
+                    }
+                });
+
+                const gestureEvents = this.events.filter(e => e.type !== 'word_select');
+                const avgIntensity = gestureEvents.length > 0 ? totalIntensity / gestureEvents.length : 0.5;
+                const dominantDirection = directionalCount > 0
+                    ? this.normalize(directionX, directionY)
+                    : { x: 1, y: 0 };
+
+                // Determine motif based on gesture distribution
+                let motifType = 'hybrid';
+                const maxGesture = Object.keys(gestureCounts).reduce((a, b) =>
+                    gestureCounts[a] > gestureCounts[b] ? a : b, 'hybrid'
+                );
+
+                if (gestureCounts.caress >= 2) motifType = 'radial';
+                else if (gestureCounts.poke >= 2) motifType = 'concentric';
+                else if (gestureCounts.press >= 2) motifType = 'cluster';
+                else if (gestureCounts.flick >= 2) motifType = 'streak';
+
+                return {
+                    selectedWords: Array.from(this.selectedWords),
+                    avgIntensity,
+                    dominantDirection,
+                    densityMetric: this.blob.density,
+                    motifType,
+                    gestureCounts
+                };
+            }
+
+            generateGeometry(ctx, features) {
+                const w = ctx.canvas.width;
+                const h = ctx.canvas.height;
+
+                // Clear canvas
+                ctx.fillStyle = '#F5F3F0';
+                ctx.fillRect(0, 0, w, h);
+
+                // Build palette from selected words
+                const palette = this.buildPalette(features.selectedWords);
+
+                // Generate based on motif type
+                const centerX = w / 2;
+                const centerY = h / 2;
+                const angle = Math.atan2(features.dominantDirection.y, features.dominantDirection.x);
+
+                switch (features.motifType) {
+                    case 'radial':
+                        this.drawRadialMotif(ctx, centerX, centerY, palette, features, angle);
+                        break;
+                    case 'concentric':
+                        this.drawConcentricMotif(ctx, centerX, centerY, palette, features);
+                        break;
+                    case 'cluster':
+                        this.drawClusterMotif(ctx, w, h, palette, features);
+                        break;
+                    case 'streak':
+                        this.drawStreakMotif(ctx, w, h, palette, features, angle);
+                        break;
+                    default:
+                        this.drawHybridMotif(ctx, w, h, palette, features);
+                }
+
+                // Add subtle texture
+                this.addTexture(ctx, w, h);
+            }
+
+            buildPalette(words) {
+                const colorMap = {
+                    warm: ['#D4A574', '#C17B5C', '#B8956A'],
+                    cool: ['#6B7C8E', '#A8B5C0', '#5A8AAF'],
+                    soft: ['#C2D4DD', '#E3C4C4', '#EBE4D8'],
+                    sharp: ['#4A4A4A', '#00A8B8', '#A83232'],
+                    heavy: ['#4A4A4A', '#5C5C5C', '#6E6E6E'],
+                    light: ['#EBE4D8', '#F5F3F0', '#FFFFFF'],
+                    rough: ['#C17B5C', '#A8664D', '#8F523E'],
+                    smooth: ['#E3C4C4', '#D4B4B4', '#C5A4A4']
+                };
+
+                const colors = [];
+                words.forEach(word => {
+                    if (colorMap[word]) {
+                        colors.push(...colorMap[word]);
+                    }
+                });
+
+                return colors.length > 0 ? colors : ['#888888', '#999999', '#AAAAAA'];
+            }
+
+            drawRadialMotif(ctx, cx, cy, palette, features, angle) {
+                const numArcs = Math.floor(8 + features.densityMetric * 12);
+
+                for (let i = 0; i < numArcs; i++) {
+                    const radius = 200 + i * (400 / numArcs);
+                    const startAngle = angle - (features.avgIntensity * 0.5) + this.seededRandom() * 0.3;
+                    const endAngle = startAngle + (0.4 + features.avgIntensity * 0.6);
+                    const strokeWidth = 8 + (1 - i / numArcs) * 20;
+
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, radius, startAngle, endAngle);
+                    ctx.strokeStyle = palette[i % palette.length];
+                    ctx.lineWidth = strokeWidth;
+                    ctx.globalAlpha = 0.6 - (i / numArcs) * 0.3;
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            drawConcentricMotif(ctx, cx, cy, palette, features) {
+                const numRings = Math.floor(6 + features.densityMetric * 10);
+
+                for (let i = 0; i < numRings; i++) {
+                    const radius = 60 + i * (500 / numRings);
+                    const strokeWidth = 3 + features.avgIntensity * 8;
+
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = palette[i % palette.length];
+                    ctx.lineWidth = strokeWidth;
+                    ctx.globalAlpha = 0.7 - (i / numRings) * 0.4;
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            drawClusterMotif(ctx, w, h, palette, features) {
+                const numClusters = Math.floor(3 + features.densityMetric * 5);
+
+                for (let c = 0; c < numClusters; c++) {
+                    const clusterX = 200 + this.seededRandom() * (w - 400);
+                    const clusterY = 400 + this.seededRandom() * (h - 800);
+                    const numCircles = Math.floor(15 + features.avgIntensity * 30);
+
+                    for (let i = 0; i < numCircles; i++) {
+                        const offsetX = (this.seededRandom() - 0.5) * 120;
+                        const offsetY = (this.seededRandom() - 0.5) * 120;
+                        const radius = 10 + this.seededRandom() * 40;
+
+                        ctx.beginPath();
+                        ctx.arc(clusterX + offsetX, clusterY + offsetY, radius, 0, Math.PI * 2);
+                        ctx.fillStyle = palette[i % palette.length];
+                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.3;
+                        ctx.fill();
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            drawStreakMotif(ctx, w, h, palette, features, angle) {
+                const numStreaks = Math.floor(12 + features.densityMetric * 20);
+
+                for (let i = 0; i < numStreaks; i++) {
+                    const startX = this.seededRandom() * w;
+                    const startY = this.seededRandom() * h;
+                    const length = 80 + features.avgIntensity * 200;
+                    const localAngle = angle + (this.seededRandom() - 0.5) * 0.4;
+                    const endX = startX + Math.cos(localAngle) * length;
+                    const endY = startY + Math.sin(localAngle) * length;
+                    const strokeWidth = 2 + this.seededRandom() * 6;
+
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = palette[i % palette.length];
+                    ctx.lineWidth = strokeWidth;
+                    ctx.lineCap = 'round';
+                    ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3;
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            drawHybridMotif(ctx, w, h, palette, features) {
+                // Combine multiple styles
+                const cx = w / 2;
+                const cy = h / 2;
+
+                // Some circles
+                for (let i = 0; i < 5; i++) {
+                    const radius = 100 + i * 80;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = palette[i % palette.length];
+                    ctx.lineWidth = 4;
+                    ctx.globalAlpha = 0.5;
+                    ctx.stroke();
+                }
+
+                // Some shapes
+                for (let i = 0; i < 10; i++) {
+                    const x = 200 + this.seededRandom() * (w - 400);
+                    const y = 400 + this.seededRandom() * (h - 800);
+                    const size = 30 + this.seededRandom() * 60;
+
+                    ctx.fillStyle = palette[i % palette.length];
+                    ctx.globalAlpha = 0.4;
+
+                    if (i % 2 === 0) {
+                        ctx.fillRect(x, y, size, size);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                ctx.globalAlpha = 1;
+            }
+
+            addTexture(ctx, w, h) {
+                const imageData = ctx.getImageData(0, 0, w, h);
+                const data = imageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const noise = (Math.random() - 0.5) * 5;
+                    data[i] += noise;
+                    data[i + 1] += noise;
+                    data[i + 2] += noise;
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+            }
+
+            closeModal() {
+                document.getElementById('generationModal').classList.remove('show');
+            }
+
+            download() {
+                const canvas = document.getElementById('output-canvas');
+                const link = document.createElement('a');
+                link.download = `emotional-composition-${this.sessionId}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }
+
+            // Animation loop
+            animate() {
+                this.time += 0.016;
+
+                // Clear canvas
+                this.ctx.fillStyle = `rgb(${this.backgroundColor.r}, ${this.backgroundColor.g}, ${this.backgroundColor.b})`;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Update blob points
+                this.blob.points.forEach((point, i) => {
+                    const noise = Math.sin(this.time + point.noiseOffset) * 0.02;
+                    point.radius += (point.targetRadius - point.radius) * 0.1;
+                    point.angle += 0.001;
+                });
+
+                // Draw blob
+                this.drawBlob();
+
+                // Update and draw particles
+                this.updateParticles();
+
+                requestAnimationFrame(() => this.animate());
+            }
+
+            drawBlob() {
+                const cx = this.blob.x * this.canvas.width;
+                const cy = this.blob.y * this.canvas.height;
+                const baseSize = Math.min(this.canvas.width, this.canvas.height) * this.blob.baseRadius;
+
+                this.ctx.save();
+                this.ctx.translate(cx, cy);
+
+                // Draw soft glow
+                const gradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, baseSize * 2);
+                const mainColor = this.blob.colors[this.blob.colors.length - 1];
+                gradient.addColorStop(0, `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, 0.1)`);
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(-baseSize * 2, -baseSize * 2, baseSize * 4, baseSize * 4);
+
+                // Draw blob shape
+                this.ctx.beginPath();
+                this.blob.points.forEach((point, i) => {
+                    const radius = baseSize * point.radius * this.blob.density;
+                    const x = Math.cos(point.angle) * radius;
+                    const y = Math.sin(point.angle) * radius;
+
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        const prevPoint = this.blob.points[i - 1];
+                        const prevRadius = baseSize * prevPoint.radius * this.blob.density;
+                        const prevX = Math.cos(prevPoint.angle) * prevRadius;
+                        const prevY = Math.sin(prevPoint.angle) * prevRadius;
+
+                        const cpX = (prevX + x) / 2;
+                        const cpY = (prevY + y) / 2;
+                        this.ctx.quadraticCurveTo(prevX, prevY, cpX, cpY);
+                    }
+                });
+                this.ctx.closePath();
+
+                // Fill blob
+                this.ctx.fillStyle = `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, 0.3)`;
+                this.ctx.fill();
+
+                // Stroke blob
+                this.ctx.strokeStyle = `rgba(${mainColor.r}, ${mainColor.g}, ${mainColor.b}, 0.6)`;
+                this.ctx.lineWidth = 3;
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            }
+
+            updateParticles() {
+                this.particles = this.particles.filter(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.1; // Gravity
+                    p.life -= 0.01;
+
+                    if (p.life > 0) {
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${p.life * 0.7})`;
+                        this.ctx.fill();
+                        return true;
+                    }
+                    return false;
+                });
+            }
+
+            createParticles(x, y, color) {
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i / 12) * Math.PI * 2;
+                    const speed = 2 + Math.random() * 3;
+                    this.particles.push({
+                        x,
+                        y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        size: 2 + Math.random() * 2,
+                        color
+                    });
+                }
+            }
+
+            // Utility functions
+            logEvent(event) {
+                event.id = this.events.length;
+                event.timestamp = Date.now();
+                this.events.push(event);
+            }
+
+            getTouchPos(touch) {
+                const rect = this.canvas.getBoundingClientRect();
+                return {
+                    x: (touch.clientX - rect.left) / rect.width,
+                    y: (touch.clientY - rect.top) / rect.height
+                };
+            }
+
+            getMousePos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - rect.left) / rect.width,
+                    y: (e.clientY - rect.top) / rect.height
+                };
+            }
+
+            getTouchDistance(t1, t2) {
+                const dx = t1.clientX - t2.clientX;
+                const dy = t1.clientY - t2.clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            getDistance(p1, p2) {
+                const dx = (p2.x - p1.x) * this.canvas.width;
+                const dy = (p2.y - p1.y) * this.canvas.height;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            getPathLength(path) {
+                let length = 0;
+                for (let i = 1; i < path.length; i++) {
+                    length += this.getDistance(path[i - 1], path[i]);
+                }
+                return length;
+            }
+
+            normalize(x, y) {
+                const mag = Math.sqrt(x * x + y * y);
+                return mag > 0 ? { x: x / mag, y: y / mag } : { x: 1, y: 0 };
+            }
+
+            hexToRgb(hex) {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : { r: 0, g: 0, b: 0 };
+            }
+
+            seededRandom() {
+                // Simple deterministic random (for reproducibility)
+                this._seed = (this._seed || this.sessionId) * 16807 % 2147483647;
+                return (this._seed - 1) / 2147483646;
+            }
+        }
+
+        // Initialize when ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => new EmotionalExplorer());
+        } else {
+            new EmotionalExplorer();
+        }
+    </script>
+</body>
+</html>
