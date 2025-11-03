@@ -203,6 +203,9 @@
                 this.isDragging = false;
                 this.emotionalLayers = [];
                 this.voiceActive = false;
+                this.recognition = null;
+                this.voiceFlashIntensity = 0;
+                this.voiceFlashColor = { r: 255, g: 255, b: 255 };
 
                 // Time tracking
                 this.time = 0;
@@ -348,33 +351,62 @@
                     return;
                 }
 
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                const recognition = new SpeechRecognition();
-
-                recognition.lang = 'en-US';
-                recognition.continuous = false;
-                recognition.interimResults = false;
-
                 const trigger = document.getElementById('voice-trigger');
+
+                // If already listening, stop the recognition
+                if (this.recognition && this.voiceActive) {
+                    try {
+                        this.recognition.stop();
+                    } catch (e) {
+                        console.log('Error stopping recognition:', e);
+                    }
+                    this.voiceActive = false;
+                    this.recognition = null;
+                    trigger.classList.remove('listening');
+                    trigger.textContent = 'speak';
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+
+                this.recognition.lang = 'en-US';
+                this.recognition.continuous = false;
+                this.recognition.interimResults = false;
+
+                this.voiceActive = true;
                 trigger.classList.add('listening');
                 trigger.textContent = 'listening';
 
-                recognition.onresult = (event) => {
+                this.recognition.onresult = (event) => {
                     const transcript = event.results[0][0].transcript.toLowerCase();
                     this.processVoiceInput(transcript);
                 };
 
-                recognition.onend = () => {
+                this.recognition.onend = () => {
+                    this.voiceActive = false;
+                    this.recognition = null;
                     trigger.classList.remove('listening');
                     trigger.textContent = 'speak';
                 };
 
-                recognition.onerror = () => {
+                this.recognition.onerror = (event) => {
+                    console.log('Recognition error:', event.error);
+                    this.voiceActive = false;
+                    this.recognition = null;
                     trigger.classList.remove('listening');
                     trigger.textContent = 'speak';
                 };
 
-                recognition.start();
+                try {
+                    this.recognition.start();
+                } catch (e) {
+                    console.log('Error starting recognition:', e);
+                    this.voiceActive = false;
+                    this.recognition = null;
+                    trigger.classList.remove('listening');
+                    trigger.textContent = 'speak';
+                }
             }
 
             processVoiceInput(transcript) {
@@ -401,22 +433,35 @@
                 } else {
                     // Default: generate color based on word length and complexity
                     const hue = (wordCount * 30 + transcript.length * 5) % 360;
-                    emotionalColor = this.hslToHex(hue, 80, 60);
+                    emotionalColor = this.hslToHex(hue, 90, 55);
                     energy = Math.min(0.9, 0.4 + wordCount / 8);
                 }
 
                 this.addEmotionalLayer('voice: ' + transcript.substring(0, 30), emotionalColor, energy);
 
-                // Voice input has stronger color shift
-                this.shiftColorStrong(emotionalColor);
+                // DRAMATICALLY stronger color shift - almost instant change
+                const rgb = this.hexToRgb(emotionalColor);
+                this.currentColor = { ...rgb };  // Instant color change!
+                this.targetColor = { ...rgb };
+
                 this.organism.energy = energy;
 
+                // Trigger massive screen flash
+                this.voiceFlashIntensity = 1.0;
+                this.voiceFlashColor = rgb;
+
                 // Dramatically change blob sizes for voice input
-                this.organism.blobs.forEach(blob => {
-                    blob.targetRadius = 100 + (energy * 150) + (Math.random() - 0.5) * 80;
+                this.organism.blobs.forEach((blob, i) => {
+                    blob.targetRadius = 80 + (energy * 180) + (Math.random() - 0.5) * 100;
+                    // Make each blob move at different speeds for more chaotic effect
+                    blob.speed = 0.5 + Math.random() * 1.5;
                 });
 
-                // Voice creates ripple effect
+                // Move organism to create movement
+                this.organism.targetX = this.canvas.width / 2 + (Math.random() - 0.5) * 200;
+                this.organism.targetY = this.canvas.height / 2 + (Math.random() - 0.5) * 200;
+
+                // Voice creates MASSIVE ripple effect
                 this.createVoiceRipple(emotionalColor);
 
                 document.getElementById('instruction').classList.add('hidden');
@@ -425,22 +470,38 @@
             createVoiceRipple(color) {
                 const rgb = this.hexToRgb(color);
 
-                // Create multiple waves of particles for dramatic effect
-                for (let wave = 0; wave < 3; wave++) {
+                // Create MASSIVE waves of particles for extremely dramatic effect
+                for (let wave = 0; wave < 5; wave++) {
                     setTimeout(() => {
-                        for (let i = 0; i < 50; i++) {
+                        for (let i = 0; i < 80; i++) {
                             const angle = Math.random() * Math.PI * 2;
-                            const speed = 3 + Math.random() * 5;
+                            const speed = 4 + Math.random() * 8;
                             this.particles.push({
                                 x: this.organism.x,
                                 y: this.organism.y,
                                 vx: Math.cos(angle) * speed,
                                 vy: Math.sin(angle) * speed,
-                                life: 1.5,
-                                color: rgb
+                                life: 2.0,
+                                color: rgb,
+                                size: 2 + Math.random() * 4
                             });
                         }
-                    }, wave * 100);
+                    }, wave * 80);
+                }
+
+                // Add extra large particles for emphasis
+                for (let i = 0; i < 20; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 4;
+                    this.particles.push({
+                        x: this.organism.x,
+                        y: this.organism.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 2.5,
+                        color: rgb,
+                        size: 8 + Math.random() * 8
+                    });
                 }
             }
 
@@ -458,7 +519,8 @@
                         vx: Math.cos(angle) * speed,
                         vy: Math.sin(angle) * speed,
                         life: 1,
-                        color: rgb
+                        color: rgb,
+                        size: 3
                     });
                 }
             }
@@ -508,6 +570,14 @@
 
                 // Draw gradient background
                 this.drawGradientBackground();
+
+                // Draw voice flash effect
+                if (this.voiceFlashIntensity > 0) {
+                    this.ctx.fillStyle = `rgba(${this.voiceFlashColor.r}, ${this.voiceFlashColor.g}, ${this.voiceFlashColor.b}, ${this.voiceFlashIntensity * 0.4})`;
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.voiceFlashIntensity -= deltaTime * 2; // Fade out quickly
+                    if (this.voiceFlashIntensity < 0) this.voiceFlashIntensity = 0;
+                }
 
                 // Update and draw trails
                 this.updateTrails();
@@ -653,13 +723,15 @@
                 this.particles = this.particles.filter(particle => {
                     particle.x += particle.vx;
                     particle.y += particle.vy;
-                    particle.life -= 0.015;
-                    particle.vy += 0.1; // Gentle gravity
+                    particle.life -= 0.01;
+                    particle.vy += 0.08; // Gentle gravity
 
                     if (particle.life > 0) {
                         this.ctx.beginPath();
-                        this.ctx.arc(particle.x, particle.y, 3 * particle.life, 0, Math.PI * 2);
-                        this.ctx.fillStyle = `rgba(${particle.color.r}, ${particle.color.g}, ${particle.color.b}, ${particle.life * 0.6})`;
+                        const baseSize = particle.size || 3;
+                        const radius = baseSize * particle.life;
+                        this.ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(${particle.color.r}, ${particle.color.g}, ${particle.color.b}, ${particle.life * 0.7})`;
                         this.ctx.fill();
                         return true;
                     }
