@@ -1146,9 +1146,10 @@
 
                         ctx.beginPath();
                         ctx.arc(clusterX + offsetX + floatX, clusterY + offsetY + floatY, radius, 0, Math.PI * 2);
-                        ctx.fillStyle = palette[i % palette.length];
-                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.3;
-                        ctx.fill();
+                        ctx.strokeStyle = palette[i % palette.length];
+                        ctx.lineWidth = (2 + this.seededRandom() * 3) * scale;
+                        ctx.globalAlpha = 0.6 + this.seededRandom() * 0.3;
+                        ctx.stroke();
                     }
                 }
                 ctx.globalAlpha = 1;
@@ -1198,16 +1199,14 @@
                 const circleBoost = Math.floor((features.maxDeformation || 0) * 3);
                 const numCircles = 5 + circleBoost;
 
-                // Some circles with pulsing and floating
+                // Some circles with floating only - no pulsing
                 for (let i = 0; i < numCircles; i++) {
                     const radius = (100 + i * 80) * scale * (1 + (features.avgDeformation || 0) * 0.3);
-                    const pulse = Math.sin(animTime * 0.667 + i * 0.6) * 15 * scale;
-                    const animRadius = radius + pulse;
                     const floatX = Math.sin(animTime * 0.3 + i * 0.4) * 12 * scale;
                     const floatY = Math.cos(animTime * 0.25 + i * 0.35) * 12 * scale;
 
                     ctx.beginPath();
-                    ctx.arc(cx + floatX, cy + floatY, animRadius, 0, Math.PI * 2);
+                    ctx.arc(cx + floatX, cy + floatY, radius, 0, Math.PI * 2);
                     ctx.strokeStyle = palette[i % palette.length];
                     ctx.lineWidth = 4 * scale * (1 + (features.maxDeformation || 0) * 0.4);
                     ctx.globalAlpha = 0.5;
@@ -1230,13 +1229,14 @@
                     const animX = x + floatX;
                     const animY = y + floatY;
 
-                    ctx.fillStyle = palette[i % palette.length];
-                    ctx.globalAlpha = 0.4;
+                    ctx.strokeStyle = palette[i % palette.length];
+                    ctx.lineWidth = 2 * scale;
+                    ctx.globalAlpha = 0.6;
 
-                    // Draw circles instead of blocks
+                    // Draw circle outlines instead of filled shapes
                     ctx.beginPath();
                     ctx.arc(animX, animY, size / 2, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.stroke();
                 }
 
                 ctx.globalAlpha = 1;
@@ -1375,13 +1375,14 @@
                         const sinkY = Math.sin(animTime * 0.267 + i * 0.4) * 10 * scale;
                         const animY = y + sinkY;
 
-                        ctx.fillStyle = '#4A4A4A';
-                        ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3;
+                        ctx.strokeStyle = '#4A4A4A';
+                        ctx.lineWidth = 2 * scale;
+                        ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3;
 
-                        // Draw circles instead of blocks
+                        // Draw circle outlines instead of filled shapes
                         ctx.beginPath();
                         ctx.arc(x, animY, size / 2, 0, Math.PI * 2);
-                        ctx.fill();
+                        ctx.stroke();
                     }
 
                     ctx.restore();
