@@ -386,8 +386,8 @@
             }
 
             resizeCanvas() {
-                this.canvas.width = this.canvas.offsetWidth;
-                this.canvas.height = this.canvas.offsetHeight;
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
             }
 
             initBlob() {
@@ -507,10 +507,6 @@
                     const pos = this.getTouchPos(touch);
                     this.touchPath.push(pos);
                     this.lastTouch = pos;
-
-                    // Update blob position during drag
-                    this.blob.x = pos.x;
-                    this.blob.y = pos.y;
                 }
             }
 
@@ -572,8 +568,6 @@
                 const pos = this.getMousePos(e);
                 this.touchPath.push(pos);
                 this.lastTouch = pos;
-                this.blob.x = pos.x;
-                this.blob.y = pos.y;
             }
 
             onMouseUp(e) {
@@ -1025,8 +1019,9 @@
             }
 
             drawBlob() {
-                const cx = this.blob.x * this.canvas.width;
-                const cy = this.blob.y * this.canvas.height;
+                // Always draw blob at screen center (40% from top)
+                const cx = this.canvas.width / 2;
+                const cy = this.canvas.height * 0.4;
                 const baseSize = Math.min(this.canvas.width, this.canvas.height) * this.blob.baseRadius;
 
                 this.ctx.save();
