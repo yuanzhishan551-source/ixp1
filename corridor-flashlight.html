@@ -122,7 +122,7 @@
             opacity: 0.7;
         }
 
-        /* BUG Invasion overlay - corners */
+        /* BUG Invasion overlay - random scattered bugs */
         #bug-invasion {
             position: absolute;
             top: 0;
@@ -132,22 +132,29 @@
             pointer-events: none;
             z-index: 60;
             font-family: monospace;
-            font-size: 14px;
             color: #ff0000;
             font-weight: bold;
+            overflow: hidden;
         }
 
-        .bug-corner {
+        .bug-text {
             position: absolute;
-            line-height: 1.2;
-            text-shadow: 0 0 5px #ff0000;
-            opacity: 0.9;
+            text-shadow: 0 0 8px #ff0000, 0 0 12px #ff0000;
+            opacity: 0.95;
+            white-space: nowrap;
+            animation: bugGlitch 0.3s infinite;
         }
 
-        #bug-top-left { top: 10px; left: 10px; text-align: left; }
-        #bug-top-right { top: 10px; right: 10px; text-align: right; }
-        #bug-bottom-left { bottom: 10px; left: 10px; text-align: left; }
-        #bug-bottom-right { bottom: 10px; right: 10px; text-align: right; }
+        @keyframes bugGlitch {
+            0%, 100% {
+                text-shadow: 0 0 8px #ff0000, 0 0 12px #ff0000;
+                opacity: 0.95;
+            }
+            50% {
+                text-shadow: 2px 2px 8px #ff0000, -2px -2px 12px #ff0000;
+                opacity: 0.85;
+            }
+        }
 
         /* Hit flash effect */
         #hit-flash {
@@ -224,12 +231,7 @@
     <div id="hit-flash"></div>
 
     <!-- BUG Invasion Overlay -->
-    <div id="bug-invasion">
-        <div id="bug-top-left" class="bug-corner"></div>
-        <div id="bug-top-right" class="bug-corner"></div>
-        <div id="bug-bottom-left" class="bug-corner"></div>
-        <div id="bug-bottom-right" class="bug-corner"></div>
-    </div>
+    <div id="bug-invasion"></div>
 
     <!-- Game Over Screen -->
     <div id="game-over">
@@ -380,11 +382,13 @@
 
             // Create initial monsters
             createMonster();
+            createMonster();
+            createMonster();
             setInterval(() => {
-                if (monsters.length < 10) {
+                if (monsters.length < 25) { // Increased from 10 to 25
                     createMonster();
                 }
-            }, 4000);
+            }, 1500); // Faster spawn: 4000ms -> 1500ms
 
             // Setup controls
             setupControls();
@@ -1085,17 +1089,71 @@
             }, 100);
         }
 
-        // Update BUG text invasion in corners
+        // Update BUG text invasion - random scattered all over edges
         function updateBugInvasion() {
-            const bugsPerCorner = Math.floor(state.hitCount * 2); // 2 BUGs per hit per corner
+            const container = document.getElementById('bug-invasion');
 
-            // Generate BUG text for each corner
-            const bugText = 'BUG\n'.repeat(bugsPerCorner);
+            // Calculate how many BUGs to add (exponential growth)
+            // Hit 1: 15 bugs, Hit 2: 30 bugs, ..., Hit 10: 150 bugs total
+            const totalBugs = state.hitCount * 15;
 
-            document.getElementById('bug-top-left').textContent = bugText;
-            document.getElementById('bug-top-right').textContent = bugText;
-            document.getElementById('bug-bottom-left').textContent = bugText;
-            document.getElementById('bug-bottom-right').textContent = bugText;
+            // Remove existing bugs
+            container.innerHTML = '';
+
+            // Generate random BUG texts all over the screen edges
+            for (let i = 0; i < totalBugs; i++) {
+                const bugElement = document.createElement('div');
+                bugElement.className = 'bug-text';
+                bugElement.textContent = 'BUG';
+
+                // Random font size (10px - 30px)
+                const fontSize = 10 + Math.random() * 20;
+                bugElement.style.fontSize = fontSize + 'px';
+
+                // Random rotation (-30deg to 30deg)
+                const rotation = (Math.random() - 0.5) * 60;
+                bugElement.style.transform = `rotate(${rotation}deg)`;
+
+                // Decide which edge to place it on
+                const edge = Math.floor(Math.random() * 4); // 0=top, 1=right, 2=bottom, 3=left
+
+                // Progress factor: how far into the screen bugs should penetrate
+                // 0 at hit 0, 1.0 at hit 10
+                const penetration = (state.hitCount / state.maxHits);
+
+                let x, y;
+
+                if (edge === 0) {
+                    // Top edge
+                    x = Math.random() * 100; // 0-100%
+                    y = Math.random() * 40 * penetration; // Penetrate into screen
+                    bugElement.style.left = x + '%';
+                    bugElement.style.top = y + '%';
+                } else if (edge === 1) {
+                    // Right edge
+                    x = 100 - Math.random() * 40 * penetration;
+                    y = Math.random() * 100;
+                    bugElement.style.left = x + '%';
+                    bugElement.style.top = y + '%';
+                } else if (edge === 2) {
+                    // Bottom edge
+                    x = Math.random() * 100;
+                    y = 100 - Math.random() * 40 * penetration;
+                    bugElement.style.left = x + '%';
+                    bugElement.style.top = y + '%';
+                } else {
+                    // Left edge
+                    x = Math.random() * 40 * penetration;
+                    y = Math.random() * 100;
+                    bugElement.style.left = x + '%';
+                    bugElement.style.top = y + '%';
+                }
+
+                // Random animation delay for staggered glitch effect
+                bugElement.style.animationDelay = (Math.random() * 0.3) + 's';
+
+                container.appendChild(bugElement);
+            }
         }
 
         // Play hit sound
