@@ -13,7 +13,6 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            cursor: none; /* Hide default cursor for immersion */
         }
 
         body {
@@ -34,6 +33,7 @@
             height: 100%;
             background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
             overflow: hidden;
+            cursor: none; /* Hide cursor during gameplay */
         }
 
         /* Parallax layers for depth illusion */
@@ -408,6 +408,13 @@
             color: #00ff00;
             font-size: 32px;
             text-shadow: 0 0 20px #00ff00;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        #loading-screen:hover {
+            color: #00ff66;
+            text-shadow: 0 0 30px #00ff00;
         }
 
         #loading-text {
@@ -475,8 +482,20 @@
     <!-- Loading Screen -->
     <div id="loading-screen">
         <div id="loading-text">INITIALIZING SYSTEM...</div>
-        <div style="font-size: 16px; margin-top: 20px;">Click to Enter</div>
+        <div style="font-size: 20px; margin-top: 30px; animation: pulse 2s infinite;">
+            ▶ CLICK ANYWHERE TO ENTER ◀
+        </div>
+        <div style="font-size: 14px; margin-top: 10px; opacity: 0.7;">
+            Best experienced with sound
+        </div>
     </div>
+
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.05); }
+        }
+    </style>
 
     <!-- Main Corridor Container -->
     <div id="corridor">
@@ -972,12 +991,19 @@
         function initializeGame() {
             if (state.isInitialized) return;
 
+            console.log('🎮 Initializing game...');
+
             // Hide loading screen
             elements.loadingScreen.classList.add('hidden');
 
-            // Initialize audio
-            initAudio();
-            playAmbientSound();
+            // Initialize audio (with error handling)
+            try {
+                initAudio();
+                playAmbientSound();
+            } catch (error) {
+                console.warn('Audio initialization failed:', error);
+                // Game continues even if audio fails
+            }
 
             // Start monster spawning
             setInterval(() => {
@@ -1000,6 +1026,7 @@
             }
 
             state.isInitialized = true;
+            console.log('✅ Game initialized successfully!');
         }
 
         // ===========================
