@@ -987,8 +987,8 @@
                 // Reference size: 800x1200 (original design size)
                 const scale = Math.min(w / 800, h / 1200);
 
-                // Clear canvas with animated background
-                const bgShift = Math.sin(animTime * 0.5) * 5;
+                // Clear canvas with animated background (slower: 0.5->0.167)
+                const bgShift = Math.sin(animTime * 0.167) * 5;
                 ctx.fillStyle = `rgb(${245 + bgShift}, ${243 + bgShift}, ${240 + bgShift})`;
                 ctx.fillRect(0, 0, w, h);
 
@@ -998,12 +998,12 @@
                 // Generate based on motif type
                 const centerX = w / 2;
                 const centerY = h / 2;
-                const angle = Math.atan2(features.dominantDirection.y, features.dominantDirection.x) + animTime * 0.1;
+                const angle = Math.atan2(features.dominantDirection.y, features.dominantDirection.x) + animTime * 0.033;
 
                 ctx.save();
-                // Global rotation animation
+                // Global rotation animation (slower: 0.3->0.1)
                 ctx.translate(centerX, centerY);
-                ctx.rotate(Math.sin(animTime * 0.3) * 0.05);
+                ctx.rotate(Math.sin(animTime * 0.1) * 0.05);
                 ctx.translate(-centerX, -centerY);
 
                 switch (features.motifType) {
@@ -1061,8 +1061,8 @@
                 const numArcs = Math.floor(8 + features.densityMetric * 12);
 
                 for (let i = 0; i < numArcs; i++) {
-                    // Pulsing radius animation
-                    const pulse = Math.sin(animTime * 2 + i * 0.5) * 10 * scale;
+                    // Pulsing radius animation (slower: 2 -> 2/3)
+                    const pulse = Math.sin(animTime * 0.667 + i * 0.5) * 10 * scale;
                     const radius = (200 + i * (400 / numArcs)) * scale + pulse;
                     const startAngle = angle - (features.avgIntensity * 0.5) + this.seededRandom() * 0.3;
                     const endAngle = startAngle + (0.4 + features.avgIntensity * 0.6);
@@ -1072,8 +1072,8 @@
                     ctx.arc(cx, cy, radius, startAngle, endAngle);
                     ctx.strokeStyle = palette[i % palette.length];
                     ctx.lineWidth = strokeWidth;
-                    // Pulsing opacity
-                    const alphaPulse = Math.sin(animTime * 1.5 + i * 0.3) * 0.1;
+                    // Pulsing opacity (slower: 1.5 -> 0.5)
+                    const alphaPulse = Math.sin(animTime * 0.5 + i * 0.3) * 0.1;
                     ctx.globalAlpha = 0.6 - (i / numArcs) * 0.3 + alphaPulse;
                     ctx.stroke();
                 }
@@ -1084,15 +1084,15 @@
                 const numRings = Math.floor(6 + features.densityMetric * 10);
 
                 for (let i = 0; i < numRings; i++) {
-                    // Expanding/contracting animation
-                    const wave = Math.sin(animTime * 1.5 - i * 0.4) * 15 * scale;
+                    // Expanding/contracting animation (slower: 1.5 -> 0.5)
+                    const wave = Math.sin(animTime * 0.5 - i * 0.4) * 15 * scale;
                     const radius = (60 + i * (500 / numRings)) * scale + wave;
                     const strokeWidth = (3 + features.avgIntensity * 8) * scale;
 
                     ctx.beginPath();
                     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
                     ctx.strokeStyle = palette[i % palette.length];
-                    ctx.lineWidth = strokeWidth + Math.sin(animTime + i) * 2 * scale;
+                    ctx.lineWidth = strokeWidth + Math.sin(animTime * 0.333 + i) * 2 * scale;
                     ctx.globalAlpha = 0.7 - (i / numRings) * 0.4;
                     ctx.stroke();
                 }
@@ -1113,10 +1113,10 @@
                         const offsetY = (this.seededRandom() - 0.5) * 120 * scale;
                         const radius = (10 + this.seededRandom() * 40) * scale;
 
-                        // Pulsing animation for radius and alpha
-                        const pulse = Math.sin(animTime * 2 + c * 0.5 + i * 0.2) * 0.2;
+                        // Pulsing animation for radius and alpha (slower: 2->0.667, 1.5->0.5)
+                        const pulse = Math.sin(animTime * 0.667 + c * 0.5 + i * 0.2) * 0.2;
                         const animRadius = radius * (1 + pulse);
-                        const alphaPulse = Math.sin(animTime * 1.5 + c * 0.3 + i * 0.15) * 0.15;
+                        const alphaPulse = Math.sin(animTime * 0.5 + c * 0.3 + i * 0.15) * 0.15;
 
                         ctx.beginPath();
                         ctx.arc(clusterX + offsetX, clusterY + offsetY, animRadius, 0, Math.PI * 2);
@@ -1129,35 +1129,45 @@
             }
 
             drawStreakMotif(ctx, w, h, palette, features, angle, animTime = 0, scale = 1) {
-                const numStreaks = Math.floor(12 + features.densityMetric * 20);
+                const numBlocks = Math.floor(12 + features.densityMetric * 20);
 
-                for (let i = 0; i < numStreaks; i++) {
+                for (let i = 0; i < numBlocks; i++) {
                     const startX = this.seededRandom() * w;
                     const startY = this.seededRandom() * h;
                     const length = (80 + features.avgIntensity * 200) * scale;
+                    const width = (20 + this.seededRandom() * 60) * scale;
                     const localAngle = angle + (this.seededRandom() - 0.5) * 0.4;
 
-                    // Flowing animation - shift length and position
-                    const lengthShift = Math.sin(animTime * 1.5 + i * 0.3) * 30 * scale;
+                    // Flowing animation - shift length and position (slower: 1.5->0.5, 1.2->0.4)
+                    const lengthShift = Math.sin(animTime * 0.5 + i * 0.3) * 30 * scale;
                     const animLength = length + lengthShift;
-                    const posShift = Math.sin(animTime * 1.2 + i * 0.4) * 15 * scale;
+                    const posShift = Math.sin(animTime * 0.4 + i * 0.4) * 15 * scale;
 
-                    const endX = startX + Math.cos(localAngle) * animLength + Math.cos(localAngle + Math.PI / 2) * posShift;
-                    const endY = startY + Math.sin(localAngle) * animLength + Math.sin(localAngle + Math.PI / 2) * posShift;
-                    const strokeWidth = (2 + this.seededRandom() * 6) * scale;
+                    // Alpha pulse (slower: 2->0.667)
+                    const alphaPulse = Math.sin(animTime * 0.667 + i * 0.25) * 0.15;
 
-                    // Alpha pulse
-                    const alphaPulse = Math.sin(animTime * 2 + i * 0.25) * 0.15;
+                    ctx.save();
+                    ctx.translate(startX, startY);
+                    ctx.rotate(localAngle);
+                    ctx.translate(posShift, 0);
 
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(endX, endY);
-                    ctx.strokeStyle = palette[i % palette.length];
-                    ctx.lineWidth = strokeWidth;
-                    ctx.lineCap = 'round';
-                    ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3 + alphaPulse;
-                    ctx.stroke();
+                    // 50% chance of blurred edges, 50% sharp edges
+                    const isBlurred = this.seededRandom() > 0.5;
+
+                    if (isBlurred) {
+                        // Blurred edges
+                        ctx.shadowBlur = 15 * scale + Math.sin(animTime * 0.5 + i * 0.2) * 5 * scale;
+                        ctx.shadowColor = palette[i % palette.length];
+                    }
+
+                    ctx.fillStyle = palette[i % palette.length];
+                    ctx.globalAlpha = 0.4 + this.seededRandom() * 0.3 + alphaPulse;
+                    ctx.fillRect(0, -width / 2, animLength, width);
+
+                    ctx.restore();
                 }
+
+                ctx.shadowBlur = 0;
                 ctx.globalAlpha = 1;
             }
 
@@ -1166,12 +1176,12 @@
                 const cx = w / 2;
                 const cy = h / 2;
 
-                // Some circles with pulsing
+                // Some circles with pulsing (slower: 2->0.667, 1.5->0.5)
                 for (let i = 0; i < 5; i++) {
                     const radius = (100 + i * 80) * scale;
-                    const pulse = Math.sin(animTime * 2 + i * 0.6) * 15 * scale;
+                    const pulse = Math.sin(animTime * 0.667 + i * 0.6) * 15 * scale;
                     const animRadius = radius + pulse;
-                    const alphaPulse = Math.sin(animTime * 1.5 + i * 0.4) * 0.15;
+                    const alphaPulse = Math.sin(animTime * 0.5 + i * 0.4) * 0.15;
 
                     ctx.beginPath();
                     ctx.arc(cx, cy, animRadius, 0, Math.PI * 2);
@@ -1181,7 +1191,7 @@
                     ctx.stroke();
                 }
 
-                // Some shapes with floating motion
+                // Some shapes with floating motion (slower: 1.2->0.4, 0.8->0.267)
                 const margin = 100 * scale;
                 for (let i = 0; i < 10; i++) {
                     const x = margin + this.seededRandom() * (w - margin * 2);
@@ -1189,8 +1199,8 @@
                     const size = (30 + this.seededRandom() * 60) * scale;
 
                     // Floating animation
-                    const floatX = Math.sin(animTime * 1.2 + i * 0.5) * 20 * scale;
-                    const floatY = Math.cos(animTime * 0.8 + i * 0.3) * 15 * scale;
+                    const floatX = Math.sin(animTime * 0.4 + i * 0.5) * 20 * scale;
+                    const floatY = Math.cos(animTime * 0.267 + i * 0.3) * 15 * scale;
                     const animX = x + floatX;
                     const animY = y + floatY;
 
@@ -1218,16 +1228,16 @@
                 ctx.save();
                 ctx.translate(cx, cy);
 
-                // Add rotation animation
-                const rotation = Math.sin(animTime * 0.5) * 0.1;
+                // Add rotation animation (slower: 0.5->0.167)
+                const rotation = Math.sin(animTime * 0.167) * 0.1;
                 ctx.rotate(rotation);
 
                 // Draw multiple layers of the organic shape
                 for (let layer = 0; layer < 3; layer++) {
                     ctx.beginPath();
 
-                    // Pulsing scale animation
-                    const scalePulse = Math.sin(animTime * 1.5 + layer * 0.5) * 0.1;
+                    // Pulsing scale animation (slower: 1.5->0.5)
+                    const scalePulse = Math.sin(animTime * 0.5 + layer * 0.5) * 0.1;
                     const layerScale = shapeScale * (1 + layer * 0.3) * (1 + scalePulse);
 
                     features.blobShape.forEach((point, i) => {
@@ -1243,8 +1253,8 @@
                     });
                     ctx.closePath();
 
-                    // Pulsing alpha
-                    const alphaPulse = Math.sin(animTime * 2 + layer * 0.4) * 0.1;
+                    // Pulsing alpha (slower: 2->0.667)
+                    const alphaPulse = Math.sin(animTime * 0.667 + layer * 0.4) * 0.1;
 
                     ctx.strokeStyle = palette[layer % palette.length];
                     ctx.lineWidth = (8 - layer * 2) * scale;
@@ -1266,8 +1276,8 @@
                     ctx.save();
                     ctx.translate(cx, cy);
 
-                    // Rotate spikes
-                    const rotation = animTime * 0.3;
+                    // Rotate spikes (slower: 0.3->0.1)
+                    const rotation = animTime * 0.1;
                     ctx.rotate(rotation);
                     ctx.translate(-cx, -cy);
 
@@ -1276,8 +1286,8 @@
                         const baseRadius = (150 + this.seededRandom() * 200) * scale;
                         const spikeLength = (40 + this.seededRandom() * 80) * scale;
 
-                        // Pulsing spike length
-                        const lengthPulse = Math.sin(animTime * 2.5 + i * 0.3) * 15 * scale;
+                        // Pulsing spike length (slower: 2.5->0.833)
+                        const lengthPulse = Math.sin(animTime * 0.833 + i * 0.3) * 15 * scale;
                         const animSpikeLength = spikeLength + lengthPulse;
 
                         const x1 = cx + Math.cos(angle) * baseRadius;
@@ -1285,8 +1295,8 @@
                         const x2 = cx + Math.cos(angle) * (baseRadius + animSpikeLength);
                         const y2 = cy + Math.sin(angle) * (baseRadius + animSpikeLength);
 
-                        // Pulsing alpha
-                        const alphaPulse = Math.sin(animTime * 3 + i * 0.2) * 0.15;
+                        // Pulsing alpha (slower: 3->1)
+                        const alphaPulse = Math.sin(animTime * 1 + i * 0.2) * 0.15;
 
                         ctx.beginPath();
                         ctx.moveTo(x1, y1);
@@ -1312,19 +1322,19 @@
                         const endX = startX + (this.seededRandom() - 0.5) * 300 * scale;
                         const endY = startY + (this.seededRandom() - 0.5) * 300 * scale;
 
-                        // Create jagged path with wiggle animation
+                        // Create jagged path with wiggle animation (slower: 2->0.667)
                         ctx.moveTo(startX, startY);
                         const segments = 8 + Math.floor(this.seededRandom() * 8);
                         for (let s = 1; s <= segments; s++) {
                             const t = s / segments;
-                            const wiggle = Math.sin(animTime * 2 + i * 0.5 + s * 0.4) * 8 * scale;
+                            const wiggle = Math.sin(animTime * 0.667 + i * 0.5 + s * 0.4) * 8 * scale;
                             const x = startX + (endX - startX) * t + (this.seededRandom() - 0.5) * 40 * scale + wiggle;
                             const y = startY + (endY - startY) * t + (this.seededRandom() - 0.5) * 40 * scale + wiggle;
                             ctx.lineTo(x, y);
                         }
 
-                        // Pulsing alpha
-                        const alphaPulse = Math.sin(animTime * 1.8 + i * 0.3) * 0.1;
+                        // Pulsing alpha (slower: 1.8->0.6)
+                        const alphaPulse = Math.sin(animTime * 0.6 + i * 0.3) * 0.1;
 
                         ctx.strokeStyle = '#C17B5C';
                         ctx.lineWidth = (3 + this.seededRandom() * 5) * scale;
@@ -1347,12 +1357,12 @@
                         const y = cy + (this.seededRandom() - 0.5) * 600 * scale;
                         const size = (10 + this.seededRandom() * 40) * scale;
 
-                        // Sinking/floating motion (slow vertical oscillation)
-                        const sinkY = Math.sin(animTime * 0.8 + i * 0.4) * 10 * scale;
+                        // Sinking/floating motion (slower: 0.8->0.267)
+                        const sinkY = Math.sin(animTime * 0.267 + i * 0.4) * 10 * scale;
                         const animY = y + sinkY;
 
-                        // Pulsing alpha to give weight feeling
-                        const alphaPulse = Math.sin(animTime * 1.2 + i * 0.3) * 0.1;
+                        // Pulsing alpha (slower: 1.2->0.4)
+                        const alphaPulse = Math.sin(animTime * 0.4 + i * 0.3) * 0.1;
 
                         ctx.fillStyle = '#4A4A4A';
                         ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3 + alphaPulse;
@@ -1372,13 +1382,13 @@
                         const y = this.seededRandom() * h;
                         const size = (1 + this.seededRandom() * 4) * scale;
 
-                        // Twinkling animation (size and alpha pulse)
-                        const twinkle = Math.sin(animTime * 3 + i * 0.15) * 0.3;
+                        // Twinkling animation (slower: 3->1, 2.5->0.833)
+                        const twinkle = Math.sin(animTime * 1 + i * 0.15) * 0.3;
                         const animSize = size * (1 + twinkle);
-                        const alphaTwinkle = Math.sin(animTime * 2.5 + i * 0.2) * 0.2;
+                        const alphaTwinkle = Math.sin(animTime * 0.833 + i * 0.2) * 0.2;
 
-                        // Gentle floating motion
-                        const floatY = Math.sin(animTime * 1.5 + i * 0.1) * 3 * scale;
+                        // Gentle floating motion (slower: 1.5->0.5)
+                        const floatY = Math.sin(animTime * 0.5 + i * 0.1) * 3 * scale;
 
                         ctx.beginPath();
                         ctx.arc(x, y + floatY, animSize, 0, Math.PI * 2);
@@ -1394,12 +1404,12 @@
                 if (features.selectedWords.includes('warm')) {
                     ctx.save();
 
-                    // Pulsing gradient radius
-                    const radiusPulse = Math.sin(animTime * 1.5) * 100 * scale;
+                    // Pulsing gradient radius (slower: 1.5->0.5)
+                    const radiusPulse = Math.sin(animTime * 0.5) * 100 * scale;
                     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500 * scale + radiusPulse);
 
-                    // Pulsing opacity
-                    const opacityPulse = Math.sin(animTime * 1.2) * 0.05;
+                    // Pulsing opacity (slower: 1.2->0.4)
+                    const opacityPulse = Math.sin(animTime * 0.4) * 0.05;
                     gradient.addColorStop(0, `rgba(212, 165, 116, ${0.15 + opacityPulse})`);
                     gradient.addColorStop(0.5, `rgba(193, 123, 92, ${0.08 + opacityPulse * 0.5})`);
                     gradient.addColorStop(1, 'rgba(184, 149, 106, 0)');
@@ -1412,12 +1422,12 @@
                 if (features.selectedWords.includes('cool')) {
                     ctx.save();
 
-                    // Pulsing gradient radius
-                    const radiusPulse = Math.sin(animTime * 1.3) * 100 * scale;
+                    // Pulsing gradient radius (slower: 1.3->0.433)
+                    const radiusPulse = Math.sin(animTime * 0.433) * 100 * scale;
                     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500 * scale + radiusPulse);
 
-                    // Pulsing opacity
-                    const opacityPulse = Math.sin(animTime * 1.4) * 0.04;
+                    // Pulsing opacity (slower: 1.4->0.467)
+                    const opacityPulse = Math.sin(animTime * 0.467) * 0.04;
                     gradient.addColorStop(0, `rgba(107, 124, 142, ${0.12 + opacityPulse})`);
                     gradient.addColorStop(0.5, `rgba(168, 181, 192, ${0.06 + opacityPulse * 0.5})`);
                     gradient.addColorStop(1, 'rgba(90, 138, 175, 0)');
