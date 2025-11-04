@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Corridor Flashlight - 3D First Person</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* UI Overlay */
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ff00;
+            font-size: 16px;
+            z-index: 100;
+            text-shadow: 0 0 10px #00ff00;
+            pointer-events: none;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border: 2px solid #00ff00;
+        }
+
+        #mode-indicator {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        #instructions {
+            font-size: 12px;
+            opacity: 0.8;
+            line-height: 1.5;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        #crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #crosshair::after {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* Click to start overlay */
+        #start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #00ff00;
+            font-size: 24px;
+            z-index: 200;
+            cursor: pointer;
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        #start-overlay.hidden {
+            display: none;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.05); }
+        }
+
+        /* Loading indicator */
+        .loading {
+            font-size: 14px;
+            margin-top: 20px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Start Overlay -->
+    <div id="start-overlay">
+        <div class="pulse">▶ CLICK TO ENTER ◀</div>
+        <div class="loading">Loading 3D Environment...</div>
+        <div style="font-size: 12px; margin-top: 20px; opacity: 0.6;">
+            WASD: Move | Mouse: Look | Click: Switch Mode
+        </div>
+    </div>
+
+    <!-- Crosshair -->
+    <div id="crosshair"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <div id="mode-indicator">MODE: LONG BEAM</div>
+        <div id="instructions">
+            WASD: Move<br>
+            MOUSE: Look Around<br>
+            CLICK: Switch Mode<br>
+            ESC: Unlock Mouse
+        </div>
+    </div>
+
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // ===========================
+        // GLOBAL STATE
+        // ===========================
+        const state = {
+            currentMode: 0,
+            isLocked: false,
+            monsters: [],
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            audioContext: null
+        };
+
+        // Mode configurations
+        const modes = [
+            {
+                name: 'LONG BEAM',
+                color: 0xffdd00,
+                colorHex: '#ffdd00',
+                intensity: 2,
+                distance: 40,
+                angle: Math.PI / 8,
+                penumbra: 0.3
+            },
+            {
+                name: 'WIDE BEAM',
+                color: 0xff8800,
+                colorHex: '#ff8800',
+                intensity: 2.5,
+                distance: 25,
+                angle: Math.PI / 4,
+                penumbra: 0.5
+            },
+            {
+                name: 'DETECTION',
+                color: 0x00ff00,
+                colorHex: '#00ff00',
+                intensity: 1.8,
+                distance: 30,
+                angle: Math.PI / 6,
+                penumbra: 0.4
+            }
+        ];
+
+        // ===========================
+        // SCENE SETUP
+        // ===========================
+        let scene, camera, renderer, spotlight, flashlightGroup;
+        let corridor, monsters = [];
+        let clock = new THREE.Clock();
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0a0a0a, 1, 50);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 1.6, 0); // Eye level height
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: false }); // No antialiasing for pixelated look
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio * 0.7); // Lower pixel ratio for pixelated effect
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.BasicShadowMap; // Pixelated shadows
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Ambient light (very dark)
+            const ambientLight = new THREE.AmbientLight(0x1a1a2e, 0.1);
+            scene.add(ambientLight);
+
+            // Create flashlight group (moves with camera)
+            flashlightGroup = new THREE.Group();
+            camera.add(flashlightGroup);
+            scene.add(camera);
+
+            // Spotlight (flashlight)
+            spotlight = new THREE.SpotLight(
+                modes[0].color,
+                modes[0].intensity,
+                modes[0].distance,
+                modes[0].angle,
+                modes[0].penumbra
+            );
+            spotlight.position.set(0, -0.2, -0.5);
+            spotlight.target.position.set(0, -0.2, -5);
+            spotlight.castShadow = true;
+            spotlight.shadow.mapSize.width = 512; // Lower resolution for pixelated shadows
+            spotlight.shadow.mapSize.height = 512;
+
+            flashlightGroup.add(spotlight);
+            flashlightGroup.add(spotlight.target);
+
+            // Create corridor
+            createCorridor();
+
+            // Create initial monsters
+            createMonster();
+            setInterval(() => {
+                if (monsters.length < 10) {
+                    createMonster();
+                }
+            }, 4000);
+
+            // Setup controls
+            setupControls();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Start animation loop
+            animate();
+        }
+
+        // ===========================
+        // CREATE 3D CORRIDOR
+        // ===========================
+        function createCorridor() {
+            corridor = new THREE.Group();
+
+            // Generate pixel textures
+            const wallTexture = generatePixelWallTexture();
+            const floorTexture = generatePixelFloorTexture();
+            const ceilingTexture = generatePixelCeilingTexture();
+
+            // Corridor dimensions
+            const corridorLength = 100;
+            const corridorWidth = 6;
+            const corridorHeight = 4;
+
+            // Floor
+            const floorGeometry = new THREE.PlaneGeometry(corridorWidth, corridorLength);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                map: floorTexture,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0;
+            floor.receiveShadow = true;
+            corridor.add(floor);
+
+            // Ceiling
+            const ceilingGeometry = new THREE.PlaneGeometry(corridorWidth, corridorLength);
+            const ceilingMaterial = new THREE.MeshStandardMaterial({
+                map: ceilingTexture,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = corridorHeight;
+            ceiling.receiveShadow = true;
+            corridor.add(ceiling);
+
+            // Left wall
+            const wallGeometry = new THREE.PlaneGeometry(corridorLength, corridorHeight);
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                map: wallTexture,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
+            leftWall.rotation.y = Math.PI / 2;
+            leftWall.position.x = -corridorWidth / 2;
+            leftWall.position.y = corridorHeight / 2;
+            leftWall.receiveShadow = true;
+            corridor.add(leftWall);
+
+            // Right wall
+            const rightWall = new THREE.Mesh(wallGeometry, wallMaterial.clone());
+            rightWall.rotation.y = -Math.PI / 2;
+            rightWall.position.x = corridorWidth / 2;
+            rightWall.position.y = corridorHeight / 2;
+            rightWall.receiveShadow = true;
+            corridor.add(rightWall);
+
+            // Add hanging pipes
+            createHangingPipes(corridor, corridorLength, corridorWidth, corridorHeight);
+
+            // Add floor cracks
+            createFloorCracks(floor, corridorWidth, corridorLength);
+
+            scene.add(corridor);
+        }
+
+        // ===========================
+        // GENERATE PIXEL TEXTURES
+        // ===========================
+        function generatePixelWallTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            // Create rough pixel blocks
+            const blockSize = 8;
+            for (let x = 0; x < canvas.width; x += blockSize) {
+                for (let y = 0; y < canvas.height; y += blockSize) {
+                    const gray = Math.random() > 0.5 ? 60 : 80;
+                    const variation = Math.floor(Math.random() * 20) - 10;
+                    ctx.fillStyle = `rgb(${gray + variation}, ${gray + variation}, ${gray + variation})`;
+                    ctx.fillRect(x, y, blockSize, blockSize);
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(8, 4);
+            texture.magFilter = THREE.NearestFilter; // Pixelated look
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        function generatePixelFloorTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            // Base floor
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Add random dark spots
+            for (let i = 0; i < 30; i++) {
+                const x = Math.floor(Math.random() * canvas.width);
+                const y = Math.floor(Math.random() * canvas.height);
+                const size = Math.floor(Math.random() * 4) + 2;
+                ctx.fillStyle = `rgb(20, 20, 20)`;
+                ctx.fillRect(x, y, size, size);
+            }
+
+            // Add pixel cracks
+            for (let i = 0; i < 10; i++) {
+                const x = Math.floor(Math.random() * canvas.width);
+                const y = Math.floor(Math.random() * canvas.height);
+                ctx.fillStyle = '#111';
+                ctx.fillRect(x, y, 2, Math.random() * 10);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(6, 12);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        function generatePixelCeilingTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            // Darker ceiling
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Add grid lines
+            ctx.strokeStyle = '#0f0f0f';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < canvas.width; i += 16) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(6, 12);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // ===========================
+        // CREATE HANGING PIPES
+        // ===========================
+        function createHangingPipes(parent, length, width, height) {
+            const pipeGeometry = new THREE.CylinderGeometry(0.08, 0.08, 2, 6); // Hexagonal for pixel look
+            const pipeMaterial = new THREE.MeshStandardMaterial({
+                color: 0x3a3a3a,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+
+            for (let i = -length / 2; i < length / 2; i += 8) {
+                if (Math.random() > 0.6) {
+                    const pipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
+                    pipe.position.set(
+                        (Math.random() - 0.5) * width * 0.8,
+                        height - 1,
+                        i
+                    );
+                    pipe.rotation.z = (Math.random() - 0.5) * 0.3;
+                    pipe.castShadow = true;
+                    parent.add(pipe);
+                }
+            }
+        }
+
+        // ===========================
+        // CREATE FLOOR CRACKS
+        // ===========================
+        function createFloorCracks(floor, width, length) {
+            // Add 3D crack details
+            const crackGeometry = new THREE.BoxGeometry(0.1, 0.02, Math.random() * 2 + 1);
+            const crackMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0a0a0a,
+                roughness: 1
+            });
+
+            for (let i = 0; i < 15; i++) {
+                const crack = new THREE.Mesh(crackGeometry, crackMaterial);
+                crack.position.set(
+                    (Math.random() - 0.5) * width,
+                    0.01,
+                    (Math.random() - 0.5) * length
+                );
+                crack.rotation.y = Math.random() * Math.PI;
+                scene.add(crack);
+            }
+        }
+
+        // ===========================
+        // CREATE TEXT MONSTERS
+        // ===========================
+        function createMonster() {
+            const monsterTexts = [
+                'BUG', 'ERR0R', 'VOID', 'NULL', 'CRASH',
+                '404', 'GLITCH', 'DANGER', 'WARNING'
+            ];
+
+            const text = monsterTexts[Math.floor(Math.random() * monsterTexts.length)];
+
+            // Create text sprite
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = Math.random() > 0.5 ? '#ff0000' : '#00ff00';
+            ctx.font = 'bold 48px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            // Add glow
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+
+            const spriteMaterial = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0.8
+            });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(2, 0.5, 1);
+
+            // Random position in corridor
+            sprite.position.set(
+                (Math.random() - 0.5) * 5,
+                Math.random() * 2 + 1,
+                -Math.random() * 80 - 5
+            );
+
+            sprite.userData = {
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.02,
+                    Math.random() * 0.01,
+                    Math.random() * 0.02
+                ),
+                type: ctx.fillStyle === '#ff0000' ? 'red' : 'green'
+            };
+
+            scene.add(sprite);
+            monsters.push(sprite);
+        }
+
+        // ===========================
+        // CONTROLS
+        // ===========================
+        function setupControls() {
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                switch (e.code) {
+                    case 'KeyW': state.moveForward = true; break;
+                    case 'KeyS': state.moveBackward = true; break;
+                    case 'KeyA': state.moveLeft = true; break;
+                    case 'KeyD': state.moveRight = true; break;
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                switch (e.code) {
+                    case 'KeyW': state.moveForward = false; break;
+                    case 'KeyS': state.moveBackward = false; break;
+                    case 'KeyA': state.moveLeft = false; break;
+                    case 'KeyD': state.moveRight = false; break;
+                }
+            });
+
+            // Mouse look
+            let startOverlay = document.getElementById('start-overlay');
+            startOverlay.addEventListener('click', () => {
+                startOverlay.classList.add('hidden');
+                renderer.domElement.requestPointerLock();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                state.isLocked = document.pointerLockElement === renderer.domElement;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!state.isLocked) return;
+
+                const movementX = e.movementX || 0;
+                const movementY = e.movementY || 0;
+
+                camera.rotation.y -= movementX * 0.002;
+                camera.rotation.x -= movementY * 0.002;
+
+                // Clamp vertical rotation
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            });
+
+            // Click to switch mode
+            document.addEventListener('click', () => {
+                if (state.isLocked) {
+                    switchMode();
+                }
+            });
+        }
+
+        // ===========================
+        // SWITCH FLASHLIGHT MODE
+        // ===========================
+        function switchMode() {
+            state.currentMode = (state.currentMode + 1) % modes.length;
+            const mode = modes[state.currentMode];
+
+            spotlight.color.setHex(mode.color);
+            spotlight.intensity = mode.intensity;
+            spotlight.distance = mode.distance;
+            spotlight.angle = mode.angle;
+            spotlight.penumbra = mode.penumbra;
+
+            document.getElementById('mode-indicator').textContent = `MODE: ${mode.name}`;
+            document.getElementById('mode-indicator').style.color = mode.colorHex;
+
+            // Flicker effect
+            spotlight.intensity *= 1.5;
+            setTimeout(() => {
+                spotlight.intensity = mode.intensity;
+            }, 100);
+        }
+
+        // ===========================
+        // UPDATE MOVEMENT
+        // ===========================
+        function updateMovement(delta) {
+            if (!state.isLocked) return;
+
+            const speed = 5.0;
+
+            state.velocity.x -= state.velocity.x * 10.0 * delta;
+            state.velocity.z -= state.velocity.z * 10.0 * delta;
+
+            state.direction.z = Number(state.moveForward) - Number(state.moveBackward);
+            state.direction.x = Number(state.moveRight) - Number(state.moveLeft);
+            state.direction.normalize();
+
+            if (state.moveForward || state.moveBackward) {
+                state.velocity.z -= state.direction.z * speed * delta;
+            }
+            if (state.moveLeft || state.moveRight) {
+                state.velocity.x -= state.direction.x * speed * delta;
+            }
+
+            // Apply velocity
+            camera.position.x += state.velocity.x * Math.cos(camera.rotation.y) - state.velocity.z * Math.sin(camera.rotation.y);
+            camera.position.z += state.velocity.x * Math.sin(camera.rotation.y) + state.velocity.z * Math.cos(camera.rotation.y);
+
+            // Keep player in corridor bounds
+            camera.position.x = Math.max(-2.5, Math.min(2.5, camera.position.x));
+            camera.position.z = Math.max(-45, Math.min(45, camera.position.z));
+        }
+
+        // ===========================
+        // UPDATE MONSTERS
+        // ===========================
+        function updateMonsters(delta) {
+            for (let i = monsters.length - 1; i >= 0; i--) {
+                const monster = monsters[i];
+
+                // Move monster
+                monster.position.add(monster.userData.velocity);
+
+                // Floating animation
+                monster.position.y += Math.sin(Date.now() * 0.001 + i) * 0.01;
+
+                // Remove if too far
+                if (monster.position.length() > 100) {
+                    scene.remove(monster);
+                    monsters.splice(i, 1);
+                }
+
+                // Pulse opacity
+                monster.material.opacity = 0.6 + Math.sin(Date.now() * 0.002 + i) * 0.2;
+            }
+        }
+
+        // ===========================
+        // ANIMATION LOOP
+        // ===========================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            updateMovement(delta);
+            updateMonsters(delta);
+
+            // Random flicker
+            if (Math.random() > 0.995) {
+                const mode = modes[state.currentMode];
+                spotlight.intensity = mode.intensity * 0.7;
+                setTimeout(() => {
+                    spotlight.intensity = mode.intensity;
+                }, 100);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // ===========================
+        // WINDOW RESIZE
+        // ===========================
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ===========================
+        // INITIALIZE
+        // ===========================
+        window.addEventListener('load', () => {
+            console.log('🔦 3D Corridor Flashlight Loading...');
+            init();
+            console.log('✅ 3D Scene Ready!');
+        });
+    </script>
+</body>
+</html>
