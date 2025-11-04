@@ -918,6 +918,25 @@
                 else if (gestureCounts.poke >= 2) motifType = 'concentric';
                 else if (gestureCounts.press >= 2) motifType = 'cluster';
                 else if (gestureCounts.flick >= 2) motifType = 'streak';
+                else if (gestureCounts.knead >= 2) motifType = 'organic';
+
+                // Calculate blob deformation metrics
+                let totalDeformation = 0;
+                let maxDeformation = 0;
+                this.blob.points.forEach(point => {
+                    const deform = Math.sqrt(point.offsetX * point.offsetX + point.offsetY * point.offsetY);
+                    totalDeformation += deform;
+                    maxDeformation = Math.max(maxDeformation, deform);
+                });
+                const avgDeformation = totalDeformation / this.blob.points.length;
+
+                // Store blob shape for generation
+                const blobShape = this.blob.points.map(point => ({
+                    angle: point.angle,
+                    radius: point.radius,
+                    offsetX: point.offsetX,
+                    offsetY: point.offsetY
+                }));
 
                 return {
                     selectedWords: Array.from(this.selectedWords),
@@ -925,7 +944,10 @@
                     dominantDirection,
                     densityMetric: this.blob.density,
                     motifType,
-                    gestureCounts
+                    gestureCounts,
+                    blobShape,
+                    avgDeformation,
+                    maxDeformation
                 };
             }
 
@@ -958,9 +980,15 @@
                     case 'streak':
                         this.drawStreakMotif(ctx, w, h, palette, features, angle);
                         break;
+                    case 'organic':
+                        this.drawOrganicMotif(ctx, centerX, centerY, palette, features);
+                        break;
                     default:
                         this.drawHybridMotif(ctx, w, h, palette, features);
                 }
+
+                // Add word-specific effects
+                this.applyWordEffects(ctx, w, h, features);
 
                 // Add subtle texture
                 this.addTexture(ctx, w, h);
@@ -1108,6 +1136,172 @@
                 ctx.globalAlpha = 1;
             }
 
+            drawOrganicMotif(ctx, cx, cy, palette, features) {
+                // Draw shape based on blob deformation
+                if (!features.blobShape || features.blobShape.length === 0) return;
+
+                const scale = 300; // Scale factor for the shape
+
+                ctx.save();
+                ctx.translate(cx, cy);
+
+                // Draw multiple layers of the organic shape
+                for (let layer = 0; layer < 3; layer++) {
+                    ctx.beginPath();
+                    const layerScale = scale * (1 + layer * 0.3);
+
+                    features.blobShape.forEach((point, i) => {
+                        const r = layerScale * point.radius;
+                        const x = Math.cos(point.angle) * r + point.offsetX * layerScale;
+                        const y = Math.sin(point.angle) * r + point.offsetY * layerScale;
+
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.closePath();
+
+                    ctx.strokeStyle = palette[layer % palette.length];
+                    ctx.lineWidth = 8 - layer * 2;
+                    ctx.globalAlpha = 0.6 - layer * 0.15;
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+
+            applyWordEffects(ctx, w, h, features) {
+                const cx = w / 2;
+                const cy = h / 2;
+
+                // Sharp: Add spikes
+                if (features.selectedWords.includes('sharp')) {
+                    const numSpikes = 20 + Math.floor(features.avgIntensity * 15);
+                    ctx.save();
+
+                    for (let i = 0; i < numSpikes; i++) {
+                        const angle = (i / numSpikes) * Math.PI * 2;
+                        const baseRadius = 150 + this.seededRandom() * 200;
+                        const spikeLength = 40 + this.seededRandom() * 80;
+
+                        const x1 = cx + Math.cos(angle) * baseRadius;
+                        const y1 = cy + Math.sin(angle) * baseRadius;
+                        const x2 = cx + Math.cos(angle) * (baseRadius + spikeLength);
+                        const y2 = cy + Math.sin(angle) * (baseRadius + spikeLength);
+
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        ctx.strokeStyle = '#00A8B8';
+                        ctx.lineWidth = 2 + this.seededRandom() * 4;
+                        ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3;
+                        ctx.stroke();
+                    }
+
+                    ctx.restore();
+                }
+
+                // Rough: Add jagged, uneven lines
+                if (features.selectedWords.includes('rough')) {
+                    const numLines = 15;
+                    ctx.save();
+
+                    for (let i = 0; i < numLines; i++) {
+                        ctx.beginPath();
+                        const startX = this.seededRandom() * w;
+                        const startY = this.seededRandom() * h;
+                        const endX = startX + (this.seededRandom() - 0.5) * 300;
+                        const endY = startY + (this.seededRandom() - 0.5) * 300;
+
+                        // Create jagged path
+                        ctx.moveTo(startX, startY);
+                        const segments = 8 + Math.floor(this.seededRandom() * 8);
+                        for (let s = 1; s <= segments; s++) {
+                            const t = s / segments;
+                            const x = startX + (endX - startX) * t + (this.seededRandom() - 0.5) * 40;
+                            const y = startY + (endY - startY) * t + (this.seededRandom() - 0.5) * 40;
+                            ctx.lineTo(x, y);
+                        }
+
+                        ctx.strokeStyle = '#C17B5C';
+                        ctx.lineWidth = 3 + this.seededRandom() * 5;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.2;
+                        ctx.stroke();
+                    }
+
+                    ctx.restore();
+                }
+
+                // Heavy: Add dense dark shapes
+                if (features.selectedWords.includes('heavy')) {
+                    ctx.save();
+                    const numShapes = 30;
+
+                    for (let i = 0; i < numShapes; i++) {
+                        const x = cx + (this.seededRandom() - 0.5) * 400;
+                        const y = cy + (this.seededRandom() - 0.5) * 600;
+                        const size = 10 + this.seededRandom() * 40;
+
+                        ctx.fillStyle = '#4A4A4A';
+                        ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3;
+                        ctx.fillRect(x - size/2, y - size/2, size, size);
+                    }
+
+                    ctx.restore();
+                }
+
+                // Light: Add airy, scattered dots
+                if (features.selectedWords.includes('light')) {
+                    ctx.save();
+                    const numDots = 100;
+
+                    for (let i = 0; i < numDots; i++) {
+                        const x = this.seededRandom() * w;
+                        const y = this.seededRandom() * h;
+                        const size = 1 + this.seededRandom() * 4;
+
+                        ctx.beginPath();
+                        ctx.arc(x, y, size, 0, Math.PI * 2);
+                        ctx.fillStyle = '#EBE4D8';
+                        ctx.globalAlpha = 0.2 + this.seededRandom() * 0.4;
+                        ctx.fill();
+                    }
+
+                    ctx.restore();
+                }
+
+                // Warm: Add warm gradients
+                if (features.selectedWords.includes('warm')) {
+                    ctx.save();
+                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500);
+                    gradient.addColorStop(0, 'rgba(212, 165, 116, 0.15)');
+                    gradient.addColorStop(0.5, 'rgba(193, 123, 92, 0.08)');
+                    gradient.addColorStop(1, 'rgba(184, 149, 106, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.restore();
+                }
+
+                // Cool: Add cool tones overlay
+                if (features.selectedWords.includes('cool')) {
+                    ctx.save();
+                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500);
+                    gradient.addColorStop(0, 'rgba(107, 124, 142, 0.12)');
+                    gradient.addColorStop(0.5, 'rgba(168, 181, 192, 0.06)');
+                    gradient.addColorStop(1, 'rgba(90, 138, 175, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.restore();
+                }
+
+                ctx.globalAlpha = 1;
+            }
+
             addTexture(ctx, w, h) {
                 const imageData = ctx.getImageData(0, 0, w, h);
                 const data = imageData.data;
@@ -1152,12 +1346,7 @@
                     point.offsetX += (point.targetOffsetX - point.offsetX) * 0.15;
                     point.offsetY += (point.targetOffsetY - point.offsetY) * 0.15;
 
-                    // If not being kneaded, slowly return to zero
-                    if (!this.isKneading) {
-                        point.targetOffsetX *= 0.92;
-                        point.targetOffsetY *= 0.92;
-                        point.targetRadius += (this.blob.baseRadius - point.targetRadius) * 0.08;
-                    }
+                    // Keep the deformed shape (no auto-recovery)
                 });
 
                 // Draw blob
