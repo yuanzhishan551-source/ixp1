@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Corridor Flashlight - Horror Experience</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        /* ===========================
+           GLOBAL RESET & BODY SETUP
+           =========================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: none; /* Hide default cursor for immersion */
+        }
+
+        body {
+            font-family: 'VT323', monospace;
+            background: #000;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* ===========================
+           CORRIDOR CONTAINER & LAYERS
+           =========================== */
+        #corridor {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            overflow: hidden;
+        }
+
+        /* Parallax layers for depth illusion */
+        .corridor-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-repeat: repeat;
+            opacity: 0.3;
+        }
+
+        /* Back layer - slower movement */
+        #layer-back {
+            background-image:
+                repeating-linear-gradient(90deg, #222 0px, #222 4px, transparent 4px, transparent 8px),
+                repeating-linear-gradient(0deg, #222 0px, #222 4px, transparent 4px, transparent 8px);
+            background-size: 80px 80px;
+            animation: parallaxBack 60s linear infinite;
+        }
+
+        /* Middle layer */
+        #layer-middle {
+            background-image:
+                repeating-linear-gradient(90deg, #333 0px, #333 2px, transparent 2px, transparent 6px);
+            background-size: 40px 100%;
+            opacity: 0.2;
+            animation: parallaxMiddle 40s linear infinite;
+        }
+
+        /* Front layer - faster movement */
+        #layer-front {
+            background-image:
+                repeating-linear-gradient(90deg, #444 0px, #444 1px, transparent 1px, transparent 4px);
+            background-size: 20px 100%;
+            opacity: 0.15;
+            animation: parallaxFront 20s linear infinite;
+        }
+
+        @keyframes parallaxBack {
+            from { background-position: 0 0; }
+            to { background-position: 0 800px; }
+        }
+
+        @keyframes parallaxMiddle {
+            from { background-position: 0 0; }
+            to { background-position: 0 400px; }
+        }
+
+        @keyframes parallaxFront {
+            from { background-position: 0 0; }
+            to { background-position: 0 200px; }
+        }
+
+        /* ===========================
+           PIXEL NOISE & SCANLINES
+           =========================== */
+        #pixel-noise {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="rgba(255,255,255,0.02)"/><rect x="1" y="1" width="1" height="1" fill="rgba(255,255,255,0.05)"/></svg>');
+            opacity: 0.5;
+            pointer-events: none;
+            animation: noiseFlicker 0.1s infinite;
+        }
+
+        @keyframes noiseFlicker {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.3; }
+        }
+
+        /* CRT Scanlines overlay */
+        #scanlines {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15) 0px,
+                transparent 1px,
+                transparent 2px,
+                rgba(0, 0, 0, 0.15) 3px
+            );
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* ===========================
+           FLASHLIGHT BEAM SYSTEM
+           =========================== */
+        #darkness-overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Flashlight cursor that follows mouse */
+        #flashlight-beam {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 15;
+            mix-blend-mode: screen;
+            transition: transform 0.1s ease-out, width 0.3s, height 0.3s;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Mode-specific beam styles */
+        .beam-long {
+            background: radial-gradient(circle,
+                rgba(255, 230, 100, 0.8) 0%,
+                rgba(255, 200, 50, 0.5) 20%,
+                rgba(255, 170, 0, 0.2) 40%,
+                transparent 70%
+            );
+            width: 300px;
+            height: 600px;
+        }
+
+        .beam-wide {
+            background: radial-gradient(circle,
+                rgba(255, 150, 50, 0.9) 0%,
+                rgba(255, 120, 30, 0.6) 30%,
+                rgba(255, 90, 0, 0.3) 50%,
+                transparent 80%
+            );
+            width: 600px;
+            height: 400px;
+        }
+
+        .beam-detect {
+            background: radial-gradient(circle,
+                rgba(50, 255, 100, 0.7) 0%,
+                rgba(30, 255, 80, 0.5) 25%,
+                rgba(0, 200, 50, 0.3) 50%,
+                transparent 75%
+            );
+            width: 450px;
+            height: 450px;
+        }
+
+        /* Flicker animation for tension */
+        @keyframes beamFlicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .flickering {
+            animation: beamFlicker 0.15s ease-in-out;
+        }
+
+        /* ===========================
+           MONSTERS (TEXT-BASED ENTITIES)
+           =========================== */
+        .monster {
+            position: absolute;
+            font-size: 20px;
+            color: #ff0000;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+            text-shadow: 0 0 10px currentColor;
+            white-space: nowrap;
+            letter-spacing: 3px;
+            animation: monsterDrift 15s linear infinite;
+        }
+
+        /* Red "BUG" monsters - visible in yellow mode */
+        .monster-red {
+            color: #ff0000;
+            text-shadow: 0 0 15px #ff0000, 0 0 25px #ff0000;
+        }
+
+        /* Green invisible monsters - visible in green mode */
+        .monster-green {
+            color: #00ff00;
+            opacity: 0.1; /* Nearly invisible */
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        /* Monster revealed state */
+        .monster-revealed {
+            opacity: 0.9;
+            animation: monsterPulse 2s ease-in-out infinite;
+        }
+
+        /* Monster frozen state (wide beam mode) */
+        .monster-frozen {
+            animation-play-state: paused;
+            color: #ff8800;
+            text-shadow: 0 0 20px #ff8800;
+        }
+
+        /* Monster disintegrating (green mode) */
+        .monster-disintegrate {
+            animation: disintegrate 2s ease-out forwards;
+        }
+
+        @keyframes monsterDrift {
+            from {
+                transform: translateY(0) translateX(0) rotate(0deg);
+            }
+            to {
+                transform: translateY(-100vh) translateX(50px) rotate(5deg);
+            }
+        }
+
+        @keyframes monsterPulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes disintegrate {
+            0% {
+                opacity: 1;
+                filter: blur(0px);
+                transform: scale(1);
+            }
+            50% {
+                filter: blur(3px);
+                transform: scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                filter: blur(8px);
+                transform: scale(0.5) translateY(-50px);
+            }
+        }
+
+        /* Pixel dissolve effect */
+        @keyframes pixelDissolve {
+            0% { opacity: 0; clip-path: inset(0 50% 50% 0); }
+            25% { opacity: 0.5; clip-path: inset(0 25% 25% 0); }
+            50% { opacity: 1; clip-path: inset(0 0 0 0); }
+            75% { opacity: 0.5; clip-path: inset(25% 0 0 25%); }
+            100% { opacity: 0; clip-path: inset(50% 0 0 50%); }
+        }
+
+        /* ===========================
+           CAMERA SHAKE EFFECT
+           =========================== */
+        @keyframes cameraShake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            10% { transform: translate(-2px, 2px) rotate(0.5deg); }
+            20% { transform: translate(2px, -2px) rotate(-0.5deg); }
+            30% { transform: translate(-2px, -2px) rotate(0.5deg); }
+            40% { transform: translate(2px, 2px) rotate(-0.5deg); }
+            50% { transform: translate(-2px, 2px) rotate(0.5deg); }
+            60% { transform: translate(2px, -2px) rotate(-0.5deg); }
+            70% { transform: translate(-2px, -2px) rotate(0.5deg); }
+            80% { transform: translate(2px, 2px) rotate(-0.5deg); }
+            90% { transform: translate(-2px, 2px) rotate(0.5deg); }
+        }
+
+        .shake {
+            animation: cameraShake 0.5s ease-in-out;
+        }
+
+        /* ===========================
+           UI ELEMENTS
+           =========================== */
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ff00;
+            font-size: 24px;
+            z-index: 50;
+            text-shadow: 0 0 10px #00ff00;
+            pointer-events: none;
+        }
+
+        #mode-indicator {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid currentColor;
+            animation: glitchText 3s infinite;
+        }
+
+        #instructions {
+            font-size: 16px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+
+        /* Glitching text effect for system messages */
+        @keyframes glitchText {
+            0%, 90%, 100% {
+                transform: translate(0);
+                text-shadow: 0 0 10px currentColor;
+            }
+            92% {
+                transform: translate(-2px, 2px);
+                text-shadow: -2px 0 10px #ff0000, 2px 0 10px #00ff00;
+            }
+            94% {
+                transform: translate(2px, -2px);
+                text-shadow: 2px 0 10px #ff0000, -2px 0 10px #00ff00;
+            }
+            96% {
+                transform: translate(-2px, -2px);
+            }
+        }
+
+        /* Monster counter */
+        #monster-count {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: #ff0000;
+            font-size: 20px;
+            z-index: 50;
+            text-shadow: 0 0 15px #ff0000;
+            pointer-events: none;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #ff0000;
+        }
+
+        /* ===========================
+           CUSTOM CURSOR (CROSSHAIR)
+           =========================== */
+        #custom-cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            z-index: 1000;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+
+        #custom-cursor::before,
+        #custom-cursor::after {
+            content: '';
+            position: absolute;
+            background: #fff;
+        }
+
+        #custom-cursor::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #custom-cursor::after {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* ===========================
+           LOADING SCREEN
+           =========================== */
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #00ff00;
+            font-size: 32px;
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        #loading-text {
+            animation: glitchText 2s infinite;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* ===========================
+           PARTICLE EFFECTS
+           =========================== */
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: currentColor;
+            pointer-events: none;
+            z-index: 20;
+            animation: particleFall 2s ease-out forwards;
+        }
+
+        @keyframes particleFall {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(100px) scale(0);
+            }
+        }
+
+        /* ===========================
+           RESPONSIVE ADJUSTMENTS
+           =========================== */
+        @media (max-width: 768px) {
+            #ui-overlay {
+                font-size: 18px;
+            }
+
+            #instructions {
+                font-size: 12px;
+            }
+
+            #flashlight-beam {
+                width: 300px;
+                height: 300px;
+            }
+
+            .beam-long {
+                width: 250px;
+                height: 500px;
+            }
+
+            .beam-wide {
+                width: 500px;
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div id="loading-text">INITIALIZING SYSTEM...</div>
+        <div style="font-size: 16px; margin-top: 20px;">Click to Enter</div>
+    </div>
+
+    <!-- Main Corridor Container -->
+    <div id="corridor">
+        <!-- Parallax Layers for Depth -->
+        <div class="corridor-layer" id="layer-back"></div>
+        <div class="corridor-layer" id="layer-middle"></div>
+        <div class="corridor-layer" id="layer-front"></div>
+
+        <!-- Pixel Noise Overlay -->
+        <div id="pixel-noise"></div>
+
+        <!-- Monsters Container -->
+        <div id="monsters-container"></div>
+
+        <!-- Darkness Overlay (shows everything dark) -->
+        <div id="darkness-overlay"></div>
+
+        <!-- Flashlight Beam (creates light circle) -->
+        <div id="flashlight-beam" class="beam-long"></div>
+
+        <!-- CRT Scanlines -->
+        <div id="scanlines"></div>
+    </div>
+
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <div id="mode-indicator">MODE: LONG BEAM</div>
+        <div id="instructions">
+            LEFT CLICK: Switch Mode<br>
+            MOVE MOUSE: Aim Flashlight
+        </div>
+    </div>
+
+    <!-- Monster Counter -->
+    <div id="monster-count">ENTITIES: 0</div>
+
+    <!-- Custom Cursor -->
+    <div id="custom-cursor"></div>
+
+    <!-- Audio Elements -->
+    <audio id="ambient-sound" loop>
+        <!-- Ambient sound would go here - using Web Audio API instead for procedural generation -->
+    </audio>
+    <audio id="static-sound">
+        <!-- Static click sound - using Web Audio API for procedural generation -->
+    </audio>
+
+    <script>
+        // ===========================
+        // GLOBAL VARIABLES & CONFIG
+        // ===========================
+        const config = {
+            maxMonsters: 15,
+            spawnRate: 2000, // milliseconds between spawns
+            beamFlickerInterval: 5000, // flicker every 5 seconds
+            monsterSpeed: 15000, // duration of drift animation
+            freezeDuration: 2000 // how long wide beam freezes monsters
+        };
+
+        // Game state
+        const state = {
+            currentMode: 0, // 0: long, 1: wide, 2: detect
+            mouseX: window.innerWidth / 2,
+            mouseY: window.innerHeight / 2,
+            monsters: [],
+            audioContext: null,
+            isInitialized: false
+        };
+
+        // Mode configurations
+        const modes = [
+            {
+                name: 'LONG BEAM',
+                class: 'beam-long',
+                color: '#ffff00',
+                detectMonsterType: 'red',
+                effect: 'reveal'
+            },
+            {
+                name: 'WIDE BEAM',
+                class: 'beam-wide',
+                color: '#ff8800',
+                detectMonsterType: 'all',
+                effect: 'freeze'
+            },
+            {
+                name: 'DETECTION',
+                class: 'beam-detect',
+                color: '#00ff00',
+                detectMonsterType: 'green',
+                effect: 'disintegrate'
+            }
+        ];
+
+        // Monster text fragments (multilingual glitch text)
+        const monsterTexts = [
+            'BUG', 'ERR0R', 'FAIL', 'VOID', 'NULL', 'CRASH',
+            '404', 'D∃∀D', 'GLlTCH', '▓▓▓', '███', 'C0RRuPT',
+            'SYS_FAIL', 'ẄĀŔŃĪŃĠ', 'ĐΔŇĢ∃Ř', '異常', 'エラー',
+            'АВАРІЯ', 'FEHLER', '错误', 'ER̷R̴O̵R̷', 'V͎O͎I͎D͎'
+        ];
+
+        // ===========================
+        // DOM ELEMENTS
+        // ===========================
+        const elements = {
+            corridor: document.getElementById('corridor'),
+            flashlightBeam: document.getElementById('flashlight-beam'),
+            darknessOverlay: document.getElementById('darkness-overlay'),
+            monstersContainer: document.getElementById('monsters-container'),
+            modeIndicator: document.getElementById('mode-indicator'),
+            monsterCount: document.getElementById('monster-count'),
+            customCursor: document.getElementById('custom-cursor'),
+            loadingScreen: document.getElementById('loading-screen'),
+            layerBack: document.getElementById('layer-back'),
+            layerMiddle: document.getElementById('layer-middle'),
+            layerFront: document.getElementById('layer-front')
+        };
+
+        // ===========================
+        // AUDIO SYSTEM (Web Audio API)
+        // ===========================
+        function initAudio() {
+            try {
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.warn('Web Audio API not supported');
+            }
+        }
+
+        // Create ambient drone sound
+        function playAmbientSound() {
+            if (!state.audioContext) return;
+
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(60, state.audioContext.currentTime); // Low hum
+
+            gainNode.gain.setValueAtTime(0, state.audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.05, state.audioContext.currentTime + 2);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+
+            // Add random glitch bursts
+            setInterval(() => {
+                if (Math.random() > 0.7) {
+                    playGlitchBurst();
+                }
+            }, 3000);
+        }
+
+        // Play glitch burst sound
+        function playGlitchBurst() {
+            if (!state.audioContext) return;
+
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(
+                Math.random() * 1000 + 200,
+                state.audioContext.currentTime
+            );
+
+            gainNode.gain.setValueAtTime(0.1, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.1);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(state.audioContext.currentTime + 0.1);
+        }
+
+        // Play static click sound (for wide beam mode)
+        function playStaticClick() {
+            if (!state.audioContext) return;
+
+            const bufferSize = state.audioContext.sampleRate * 0.1; // 0.1 second
+            const buffer = state.audioContext.createBuffer(1, bufferSize, state.audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // Generate white noise
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const source = state.audioContext.createBufferSource();
+            const gainNode = state.audioContext.createGain();
+
+            source.buffer = buffer;
+            gainNode.gain.setValueAtTime(0.3, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.1);
+
+            source.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            source.start();
+        }
+
+        // Play subtle detection noise
+        function playDetectionNoise() {
+            if (!state.audioContext) return;
+
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(800, state.audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, state.audioContext.currentTime + 0.2);
+
+            gainNode.gain.setValueAtTime(0.1, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.2);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(state.audioContext.currentTime + 0.2);
+        }
+
+        // ===========================
+        // FLASHLIGHT SYSTEM
+        // ===========================
+
+        // Update flashlight position based on mouse/touch
+        function updateFlashlightPosition(x, y) {
+            state.mouseX = x;
+            state.mouseY = y;
+
+            elements.flashlightBeam.style.left = x + 'px';
+            elements.flashlightBeam.style.top = y + 'px';
+
+            elements.customCursor.style.left = x + 'px';
+            elements.customCursor.style.top = y + 'px';
+        }
+
+        // Switch flashlight mode (cycles through 3 modes)
+        function switchMode() {
+            state.currentMode = (state.currentMode + 1) % modes.length;
+            const mode = modes[state.currentMode];
+
+            // Update beam visual
+            elements.flashlightBeam.className = mode.class;
+
+            // Update UI
+            elements.modeIndicator.textContent = `MODE: ${mode.name}`;
+            elements.modeIndicator.style.color = mode.color;
+            elements.modeIndicator.style.borderColor = mode.color;
+
+            // Play mode switch sound
+            if (state.currentMode === 1) {
+                playStaticClick();
+            } else {
+                playGlitchBurst();
+            }
+
+            // Brief flash effect
+            elements.flashlightBeam.style.opacity = '1.5';
+            setTimeout(() => {
+                elements.flashlightBeam.style.opacity = '1';
+            }, 100);
+        }
+
+        // Trigger beam flicker for tension
+        function flickerBeam() {
+            elements.flashlightBeam.classList.add('flickering');
+            setTimeout(() => {
+                elements.flashlightBeam.classList.remove('flickering');
+            }, 150);
+        }
+
+        // ===========================
+        // MONSTER SYSTEM
+        // ===========================
+
+        // Spawn a new monster
+        function spawnMonster() {
+            if (state.monsters.length >= config.maxMonsters) return;
+
+            const monster = document.createElement('div');
+            monster.className = 'monster';
+
+            // Randomly assign monster type
+            const isGreenMonster = Math.random() > 0.6;
+            const monsterType = isGreenMonster ? 'green' : 'red';
+
+            monster.classList.add(`monster-${monsterType}`);
+            monster.dataset.type = monsterType;
+
+            // Random text content
+            const text = monsterTexts[Math.floor(Math.random() * monsterTexts.length)];
+            monster.textContent = text;
+
+            // Random starting position
+            const startX = Math.random() * (window.innerWidth - 200) + 100;
+            const startY = window.innerHeight + 50;
+
+            monster.style.left = startX + 'px';
+            monster.style.top = startY + 'px';
+
+            // Random animation duration for variety
+            const duration = config.monsterSpeed + (Math.random() * 10000 - 5000);
+            monster.style.animationDuration = duration + 'ms';
+
+            // Add to DOM and state
+            elements.monstersContainer.appendChild(monster);
+            state.monsters.push({
+                element: monster,
+                type: monsterType,
+                x: startX,
+                y: startY,
+                frozen: false,
+                revealed: false
+            });
+
+            // Trigger camera shake
+            elements.corridor.classList.add('shake');
+            setTimeout(() => {
+                elements.corridor.classList.remove('shake');
+            }, 500);
+
+            // Remove monster after animation completes
+            setTimeout(() => {
+                removeMonster(monster);
+            }, duration);
+
+            // Update counter
+            updateMonsterCount();
+        }
+
+        // Remove monster from DOM and state
+        function removeMonster(monsterElement) {
+            const index = state.monsters.findIndex(m => m.element === monsterElement);
+            if (index !== -1) {
+                state.monsters.splice(index, 1);
+            }
+            if (monsterElement.parentNode) {
+                monsterElement.parentNode.removeChild(monsterElement);
+            }
+            updateMonsterCount();
+        }
+
+        // Update monster counter UI
+        function updateMonsterCount() {
+            elements.monsterCount.textContent = `ENTITIES: ${state.monsters.length}`;
+        }
+
+        // Check collision between flashlight beam and monsters
+        function checkMonsterCollisions() {
+            const currentMode = modes[state.currentMode];
+            const beamRect = elements.flashlightBeam.getBoundingClientRect();
+            const beamCenterX = beamRect.left + beamRect.width / 2;
+            const beamCenterY = beamRect.top + beamRect.height / 2;
+            const beamRadius = Math.max(beamRect.width, beamRect.height) / 2;
+
+            state.monsters.forEach(monster => {
+                const monsterRect = monster.element.getBoundingClientRect();
+                const monsterCenterX = monsterRect.left + monsterRect.width / 2;
+                const monsterCenterY = monsterRect.top + monsterRect.height / 2;
+
+                // Calculate distance between beam center and monster center
+                const distance = Math.sqrt(
+                    Math.pow(beamCenterX - monsterCenterX, 2) +
+                    Math.pow(beamCenterY - monsterCenterY, 2)
+                );
+
+                // Check if monster is within beam radius
+                const isInBeam = distance < beamRadius * 0.6; // 0.6 for more precise detection
+
+                if (isInBeam) {
+                    handleMonsterDetection(monster, currentMode);
+                } else {
+                    // Reset monster state if it leaves the beam
+                    if (monster.revealed && !monster.frozen) {
+                        monster.element.classList.remove('monster-revealed');
+                        monster.revealed = false;
+                    }
+                }
+            });
+        }
+
+        // Handle monster detection based on mode
+        function handleMonsterDetection(monster, mode) {
+            // Mode 0 (Long Beam): Reveals red monsters with pixel dissolve
+            if (mode.detectMonsterType === 'red' && monster.type === 'red') {
+                if (!monster.revealed) {
+                    monster.element.classList.add('monster-revealed');
+                    monster.element.style.animation = 'pixelDissolve 1s ease-in-out infinite';
+                    monster.revealed = true;
+                    playDetectionNoise();
+                }
+            }
+
+            // Mode 1 (Wide Beam): Freezes all monsters
+            else if (mode.detectMonsterType === 'all') {
+                if (!monster.frozen) {
+                    monster.element.classList.add('monster-frozen');
+                    monster.frozen = true;
+
+                    // Unfreeze after duration
+                    setTimeout(() => {
+                        if (monster.element.parentNode) {
+                            monster.element.classList.remove('monster-frozen');
+                            monster.frozen = false;
+                        }
+                    }, config.freezeDuration);
+                }
+            }
+
+            // Mode 2 (Detection): Disintegrates green monsters
+            else if (mode.detectMonsterType === 'green' && monster.type === 'green') {
+                if (!monster.element.classList.contains('monster-disintegrate')) {
+                    monster.element.classList.add('monster-revealed');
+                    monster.element.classList.add('monster-disintegrate');
+                    createParticles(monster.element, '#00ff00');
+                    playDetectionNoise();
+
+                    // Remove after disintegration animation
+                    setTimeout(() => {
+                        removeMonster(monster.element);
+                    }, 2000);
+                }
+            }
+        }
+
+        // Create particle effect when monster disintegrates
+        function createParticles(element, color) {
+            const rect = element.getBoundingClientRect();
+            const particleCount = 15;
+
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.color = color;
+                particle.style.left = rect.left + Math.random() * rect.width + 'px';
+                particle.style.top = rect.top + Math.random() * rect.height + 'px';
+
+                document.body.appendChild(particle);
+
+                // Remove particle after animation
+                setTimeout(() => {
+                    if (particle.parentNode) {
+                        particle.parentNode.removeChild(particle);
+                    }
+                }, 2000);
+            }
+        }
+
+        // ===========================
+        // EVENT LISTENERS
+        // ===========================
+
+        // Mouse movement tracking
+        document.addEventListener('mousemove', (e) => {
+            updateFlashlightPosition(e.clientX, e.clientY);
+        });
+
+        // Touch movement tracking (mobile support)
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            updateFlashlightPosition(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        // Click to switch mode
+        document.addEventListener('click', (e) => {
+            if (!state.isInitialized) {
+                initializeGame();
+            } else {
+                switchMode();
+            }
+        });
+
+        // Touch tap to switch mode (mobile)
+        document.addEventListener('touchstart', (e) => {
+            if (!state.isInitialized) {
+                initializeGame();
+            } else {
+                switchMode();
+            }
+        });
+
+        // ===========================
+        // GAME INITIALIZATION
+        // ===========================
+
+        function initializeGame() {
+            if (state.isInitialized) return;
+
+            // Hide loading screen
+            elements.loadingScreen.classList.add('hidden');
+
+            // Initialize audio
+            initAudio();
+            playAmbientSound();
+
+            // Start monster spawning
+            setInterval(() => {
+                spawnMonster();
+            }, config.spawnRate);
+
+            // Start beam flicker effect
+            setInterval(() => {
+                flickerBeam();
+            }, config.beamFlickerInterval);
+
+            // Start collision detection loop
+            setInterval(() => {
+                checkMonsterCollisions();
+            }, 50); // Check every 50ms for smooth detection
+
+            // Spawn initial monsters
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => spawnMonster(), i * 500);
+            }
+
+            state.isInitialized = true;
+        }
+
+        // ===========================
+        // INITIALIZE ON LOAD
+        // ===========================
+
+        window.addEventListener('load', () => {
+            console.log('🔦 The Corridor Flashlight - Loaded');
+            console.log('Click anywhere to begin...');
+
+            // Set initial cursor position
+            updateFlashlightPosition(window.innerWidth / 2, window.innerHeight / 2);
+        });
+
+        // Prevent context menu on right click
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
