@@ -985,7 +985,8 @@
 
                 // Calculate scale factor based on canvas size
                 // Reference size: 800x1200 (original design size)
-                const scale = Math.min(w / 800, h / 1200);
+                // Reduced to 70% to ensure all elements fit within screen
+                const scale = Math.min(w / 800, h / 1200) * 0.7;
 
                 // Clear canvas with animated background (slower: 0.5->0.167)
                 const bgShift = Math.sin(animTime * 0.167) * 5;
