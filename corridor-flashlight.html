@@ -121,10 +121,122 @@
             margin-top: 20px;
             opacity: 0.7;
         }
+
+        /* BUG Invasion overlay - corners */
+        #bug-invasion {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 60;
+            font-family: monospace;
+            font-size: 14px;
+            color: #ff0000;
+            font-weight: bold;
+        }
+
+        .bug-corner {
+            position: absolute;
+            line-height: 1.2;
+            text-shadow: 0 0 5px #ff0000;
+            opacity: 0.9;
+        }
+
+        #bug-top-left { top: 10px; left: 10px; text-align: left; }
+        #bug-top-right { top: 10px; right: 10px; text-align: right; }
+        #bug-bottom-left { bottom: 10px; left: 10px; text-align: left; }
+        #bug-bottom-right { bottom: 10px; right: 10px; text-align: right; }
+
+        /* Hit flash effect */
+        #hit-flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0);
+            pointer-events: none;
+            z-index: 70;
+            transition: background 0.1s;
+        }
+
+        .flash-hit {
+            background: rgba(255, 0, 0, 0.5) !important;
+        }
+
+        /* Game Over screen */
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            color: #ff0000;
+            font-size: 48px;
+            text-shadow: 0 0 30px #ff0000;
+        }
+
+        #game-over.show {
+            display: flex;
+        }
+
+        #game-over-text {
+            animation: glitch 0.5s infinite;
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-5px, 5px); }
+            40% { transform: translate(5px, -5px); }
+            60% { transform: translate(-5px, -5px); }
+            80% { transform: translate(5px, 5px); }
+        }
+
+        .restart-btn {
+            margin-top: 30px;
+            font-size: 20px;
+            padding: 15px 30px;
+            background: #ff0000;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .restart-btn:hover {
+            background: #ff3333;
+        }
     </style>
 </head>
 <body>
     <div id="canvas-container"></div>
+
+    <!-- Hit Flash Effect -->
+    <div id="hit-flash"></div>
+
+    <!-- BUG Invasion Overlay -->
+    <div id="bug-invasion">
+        <div id="bug-top-left" class="bug-corner"></div>
+        <div id="bug-top-right" class="bug-corner"></div>
+        <div id="bug-bottom-left" class="bug-corner"></div>
+        <div id="bug-bottom-right" class="bug-corner"></div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over">
+        <div id="game-over-text">SYSTEM CORRUPTED</div>
+        <div style="font-size: 24px; margin-top: 20px;">BUG OVERFLOW</div>
+        <button class="restart-btn" onclick="location.reload()">RESTART</button>
+    </div>
 
     <!-- Start Overlay -->
     <div id="start-overlay">
@@ -166,7 +278,12 @@
             moveRight: false,
             velocity: new THREE.Vector3(),
             direction: new THREE.Vector3(),
-            audioContext: null
+            audioContext: null,
+            hitCount: 0,
+            maxHits: 10,
+            isGameOver: false,
+            lastHitTime: 0,
+            invulnerableTime: 1.0 // 1 second invulnerability after hit
         };
 
         // Mode configurations
@@ -290,8 +407,8 @@
             const floorTexture = generatePixelFloorTexture();
             const ceilingTexture = generatePixelCeilingTexture();
 
-            // Corridor dimensions
-            const corridorLength = 100;
+            // Corridor dimensions (5x longer)
+            const corridorLength = 500;
             const corridorWidth = 6;
             const corridorHeight = 4;
 
@@ -512,8 +629,8 @@
             const monsterType = Math.random() > 0.6 ? 'green' : 'red';
             const baseColor = monsterType === 'red' ? '#ff0000' : '#00ff00';
 
-            // Create 15-25 text fragments in a cluster
-            const fragmentCount = Math.floor(Math.random() * 11) + 15; // 15-25 fragments
+            // Create 40-60 text fragments in a cluster (much denser)
+            const fragmentCount = Math.floor(Math.random() * 21) + 40; // 40-60 fragments
 
             for (let i = 0; i < fragmentCount; i++) {
                 const text = monsterTexts[Math.floor(Math.random() * monsterTexts.length)];
@@ -548,11 +665,11 @@
 
                 const sprite = new THREE.Sprite(spriteMaterial);
 
-                // Random position within cluster (2x2x2 cube)
+                // Random position within cluster (1x1x1 cube - much tighter)
                 sprite.position.set(
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2
+                    (Math.random() - 0.5) * 1,
+                    (Math.random() - 0.5) * 1,
+                    (Math.random() - 0.5) * 1
                 );
 
                 // Random scale
@@ -568,11 +685,11 @@
                 monsterCluster.add(sprite);
             }
 
-            // Position cluster in corridor (far away from player)
+            // Position cluster in corridor (far away from player in 500m corridor)
             monsterCluster.position.set(
                 (Math.random() - 0.5) * 4,
                 1.5 + Math.random() * 1,
-                -20 - Math.random() * 60 // Start far away
+                -50 - Math.random() * 400 // Start far away in long corridor
             );
 
             // Store cluster data
@@ -674,7 +791,7 @@
         // UPDATE MOVEMENT
         // ===========================
         function updateMovement(delta) {
-            if (!state.isLocked) return;
+            if (!state.isLocked || state.isGameOver) return;
 
             const speed = 5.0;
 
@@ -696,9 +813,9 @@
             camera.position.x += state.velocity.x * Math.cos(camera.rotation.y) - state.velocity.z * Math.sin(camera.rotation.y);
             camera.position.z += state.velocity.x * Math.sin(camera.rotation.y) + state.velocity.z * Math.cos(camera.rotation.y);
 
-            // Keep player in corridor bounds
+            // Keep player in corridor bounds (500m corridor)
             camera.position.x = Math.max(-2.5, Math.min(2.5, camera.position.x));
-            camera.position.z = Math.max(-45, Math.min(45, camera.position.z));
+            camera.position.z = Math.max(-245, Math.min(245, camera.position.z));
         }
 
         // ===========================
@@ -819,9 +936,23 @@
                     sprite.rotation.z = Math.sin(time * 0.5 + index) * 0.1;
                 });
 
-                // Remove if too close to player or too far
+                // Check if monster hits player
                 const distanceToPlayer = monsterCluster.position.distanceTo(camera.position);
-                if (distanceToPlayer < 2 || distanceToPlayer > 100) {
+                if (distanceToPlayer < 2) {
+                    // Monster hit the player!
+                    const currentTime = Date.now() * 0.001;
+                    if (currentTime - state.lastHitTime > state.invulnerableTime) {
+                        playerHit();
+                        state.lastHitTime = currentTime;
+                    }
+                    // Remove monster after hit
+                    scene.remove(monsterCluster);
+                    monsters.splice(i, 1);
+                    continue;
+                }
+
+                // Remove if too far
+                if (distanceToPlayer > 500) {
                     scene.remove(monsterCluster);
                     monsters.splice(i, 1);
                 }
@@ -903,6 +1034,126 @@
             } catch (e) {
                 console.warn('Web Audio API not supported');
             }
+        }
+
+        // ===========================
+        // PLAYER HIT & DAMAGE SYSTEM
+        // ===========================
+        function playerHit() {
+            if (state.isGameOver) return;
+
+            state.hitCount++;
+            console.log(`Hit! Count: ${state.hitCount}/${state.maxHits}`);
+
+            // Trigger hit effect
+            triggerHitEffect();
+
+            // Update BUG invasion UI
+            updateBugInvasion();
+
+            // Play hit sound
+            playHitSound();
+
+            // Check for game over
+            if (state.hitCount >= state.maxHits) {
+                triggerGameOver();
+            }
+        }
+
+        // Trigger visual hit effect
+        function triggerHitEffect() {
+            const hitFlash = document.getElementById('hit-flash');
+
+            // Flash red
+            hitFlash.classList.add('flash-hit');
+            setTimeout(() => {
+                hitFlash.classList.remove('flash-hit');
+            }, 200);
+
+            // Camera shake effect
+            const originalY = camera.rotation.y;
+            const originalX = camera.rotation.x;
+            const shakeAmount = 0.1;
+
+            // Quick shake
+            camera.rotation.x += (Math.random() - 0.5) * shakeAmount;
+            camera.rotation.y += (Math.random() - 0.5) * shakeAmount;
+
+            setTimeout(() => {
+                camera.rotation.x = originalX;
+                camera.rotation.y = originalY;
+            }, 100);
+        }
+
+        // Update BUG text invasion in corners
+        function updateBugInvasion() {
+            const bugsPerCorner = Math.floor(state.hitCount * 2); // 2 BUGs per hit per corner
+
+            // Generate BUG text for each corner
+            const bugText = 'BUG\n'.repeat(bugsPerCorner);
+
+            document.getElementById('bug-top-left').textContent = bugText;
+            document.getElementById('bug-top-right').textContent = bugText;
+            document.getElementById('bug-bottom-left').textContent = bugText;
+            document.getElementById('bug-bottom-right').textContent = bugText;
+        }
+
+        // Play hit sound
+        function playHitSound() {
+            if (!state.audioContext) return;
+
+            // Harsh alarm sound
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(200, state.audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, state.audioContext.currentTime + 0.3);
+
+            gainNode.gain.setValueAtTime(0.3, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.3);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(state.audioContext.currentTime + 0.3);
+        }
+
+        // Trigger game over
+        function triggerGameOver() {
+            state.isGameOver = true;
+
+            // Show game over screen
+            document.getElementById('game-over').classList.add('show');
+
+            // Release pointer lock
+            document.exitPointerLock();
+
+            // Play game over sound
+            playGameOverSound();
+        }
+
+        // Play game over sound
+        function playGameOverSound() {
+            if (!state.audioContext) return;
+
+            // Dramatic descending tone
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(800, state.audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, state.audioContext.currentTime + 1.5);
+
+            gainNode.gain.setValueAtTime(0.4, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 1.5);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(state.audioContext.currentTime + 1.5);
         }
 
         // ===========================
