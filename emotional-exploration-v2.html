@@ -1232,13 +1232,10 @@
                     ctx.fillStyle = palette[i % palette.length];
                     ctx.globalAlpha = 0.4;
 
-                    if (i % 2 === 0) {
-                        ctx.fillRect(animX, animY, size, size);
-                    } else {
-                        ctx.beginPath();
-                        ctx.arc(animX, animY, size / 2, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
+                    // Draw circles instead of blocks
+                    ctx.beginPath();
+                    ctx.arc(animX, animY, size / 2, 0, Math.PI * 2);
+                    ctx.fill();
                 }
 
                 ctx.globalAlpha = 1;
@@ -1379,7 +1376,11 @@
 
                         ctx.fillStyle = '#4A4A4A';
                         ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3;
-                        ctx.fillRect(x - size/2, animY - size/2, size, size);
+
+                        // Draw circles instead of blocks
+                        ctx.beginPath();
+                        ctx.arc(x, animY, size / 2, 0, Math.PI * 2);
+                        ctx.fill();
                     }
 
                     ctx.restore();
