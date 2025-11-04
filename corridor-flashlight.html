@@ -255,6 +255,9 @@
             flashlightGroup.add(spotlight);
             flashlightGroup.add(spotlight.target);
 
+            // Initialize audio
+            initAudio();
+
             // Create corridor
             createCorridor();
 
@@ -500,11 +503,7 @@
         // CREATE TEXT MONSTERS (CLUSTERS)
         // ===========================
         function createMonster() {
-            const monsterTexts = [
-                'BUG', 'ERR0R', 'VOID', 'NULL', 'CRASH', '404', 'GLITCH', 'DANGER', 'WARNING',
-                'FATAL', 'PANIC', 'ABORT', 'FAIL', 'DEAD', 'CORRUPT', 'BROKEN', 'LOST',
-                '異常', 'エラー', '危険', 'АВАРІЯ', 'FEHLER', '错误', 'D∃∀D', '▓▓▓', '███'
-            ];
+            const monsterTexts = ['BUG']; // Only use BUG
 
             // Create a group for the monster cluster
             const monsterCluster = new THREE.Group();
@@ -582,7 +581,11 @@
                 baseOpacity: monsterType === 'green' ? 0.2 : 0.8,
                 pulsePhase: Math.random() * Math.PI * 2,
                 rotationSpeed: (Math.random() - 0.5) * 0.3,
-                approachSpeed: 0.01 + Math.random() * 0.02 // Speed towards player
+                approachSpeed: 0.01 + Math.random() * 0.02, // Speed towards player
+                frozen: false,
+                freezeTimer: 0,
+                revealed: false,
+                disintegrating: false
             };
 
             scene.add(monsterCluster);
@@ -703,34 +706,113 @@
         // ===========================
         function updateMonsters(delta) {
             const time = Date.now() * 0.001;
+            const currentMode = modes[state.currentMode];
 
             for (let i = monsters.length - 1; i >= 0; i--) {
                 const monsterCluster = monsters[i];
                 const userData = monsterCluster.userData;
 
-                // Calculate direction towards player
-                const directionToPlayer = new THREE.Vector3();
-                directionToPlayer.subVectors(camera.position, monsterCluster.position);
-                directionToPlayer.y = 0; // Only move horizontally
-                directionToPlayer.normalize();
+                // Check if monster is hit by flashlight
+                const isHitByFlashlight = checkFlashlightHit(monsterCluster);
 
-                // Move cluster slowly towards player
-                monsterCluster.position.x += directionToPlayer.x * userData.approachSpeed;
-                monsterCluster.position.z += directionToPlayer.z * userData.approachSpeed;
+                // Handle freeze timer
+                if (userData.frozen && userData.freezeTimer > 0) {
+                    userData.freezeTimer -= delta;
+                    if (userData.freezeTimer <= 0) {
+                        userData.frozen = false;
+                    }
+                }
 
-                // Slow rotation of entire cluster
-                monsterCluster.rotation.y += userData.rotationSpeed * delta;
+                // Apply flashlight effects based on mode
+                if (isHitByFlashlight) {
+                    // Mode 0: Long Beam (Yellow) - Reveals red monsters
+                    if (state.currentMode === 0 && userData.type === 'red') {
+                        userData.revealed = true;
+                    }
+
+                    // Mode 1: Wide Beam (Orange) - Freezes all monsters
+                    else if (state.currentMode === 1) {
+                        if (!userData.frozen) {
+                            userData.frozen = true;
+                            userData.freezeTimer = 2.0; // Freeze for 2 seconds
+                            playStaticClick();
+                        }
+                    }
+
+                    // Mode 2: Detection (Green) - Disintegrates green monsters
+                    else if (state.currentMode === 2 && userData.type === 'green') {
+                        if (!userData.disintegrating) {
+                            userData.disintegrating = true;
+                            userData.disintegrateTime = time;
+                            playDetectionNoise();
+                        }
+                    }
+                } else {
+                    // Not hit by flashlight
+                    if (state.currentMode === 0) {
+                        userData.revealed = false;
+                    }
+                }
+
+                // Handle disintegration
+                if (userData.disintegrating) {
+                    const disintegrateProgress = (time - userData.disintegrateTime) / 2.0; // 2 seconds to disintegrate
+                    if (disintegrateProgress >= 1.0) {
+                        // Remove completely disintegrated monster
+                        scene.remove(monsterCluster);
+                        monsters.splice(i, 1);
+                        continue;
+                    }
+
+                    // Fade out and break apart
+                    monsterCluster.children.forEach((sprite, index) => {
+                        sprite.material.opacity *= (1 - disintegrateProgress);
+                        sprite.position.y += disintegrateProgress * 0.1;
+                    });
+                }
+
+                // Move cluster slowly towards player (only if not frozen)
+                if (!userData.frozen && !userData.disintegrating) {
+                    const directionToPlayer = new THREE.Vector3();
+                    directionToPlayer.subVectors(camera.position, monsterCluster.position);
+                    directionToPlayer.y = 0; // Only move horizontally
+                    directionToPlayer.normalize();
+
+                    monsterCluster.position.x += directionToPlayer.x * userData.approachSpeed;
+                    monsterCluster.position.z += directionToPlayer.z * userData.approachSpeed;
+                }
+
+                // Slow rotation of entire cluster (slower when frozen)
+                const rotationSpeed = userData.frozen ? userData.rotationSpeed * 0.1 : userData.rotationSpeed;
+                monsterCluster.rotation.y += rotationSpeed * delta;
 
                 // Pulse opacity of entire cluster
                 const pulseFactor = Math.sin(time * 1.5 + userData.pulsePhase) * 0.2;
 
                 // Animate individual text fragments within cluster
                 monsterCluster.children.forEach((sprite, index) => {
+                    if (userData.disintegrating) return; // Skip normal animation if disintegrating
+
                     // Individual floating motion
                     sprite.position.y += Math.sin(time * sprite.userData.floatSpeed + sprite.userData.floatOffset) * 0.005;
 
-                    // Pulse individual fragment opacity
-                    const targetOpacity = userData.type === 'green' ? 0.2 : (userData.baseOpacity + pulseFactor);
+                    // Adjust opacity based on state
+                    let targetOpacity;
+                    if (userData.type === 'green') {
+                        // Green monsters: nearly invisible unless revealed
+                        targetOpacity = userData.revealed ? 0.8 : 0.1;
+                    } else {
+                        // Red monsters: visible, more visible when revealed
+                        targetOpacity = userData.revealed ? 1.0 : (userData.baseOpacity + pulseFactor);
+                    }
+
+                    // Apply freeze effect (orange tint)
+                    if (userData.frozen) {
+                        sprite.material.color.setHex(0xff8800); // Orange tint when frozen
+                    } else {
+                        sprite.material.color.setHex(0xffffff); // Normal color
+                    }
+
                     sprite.material.opacity = targetOpacity + Math.sin(time * 2 + index) * 0.1;
 
                     // Slight rotation for each fragment
@@ -743,6 +825,83 @@
                     scene.remove(monsterCluster);
                     monsters.splice(i, 1);
                 }
+            }
+        }
+
+        // ===========================
+        // CHECK FLASHLIGHT HIT
+        // ===========================
+        function checkFlashlightHit(monsterCluster) {
+            // Get monster position relative to camera
+            const monsterPos = new THREE.Vector3();
+            monsterPos.copy(monsterCluster.position);
+
+            // Transform to camera space
+            const cameraToMonster = new THREE.Vector3();
+            cameraToMonster.subVectors(monsterPos, camera.position);
+
+            // Get distance
+            const distance = cameraToMonster.length();
+
+            // Get current mode settings
+            const mode = modes[state.currentMode];
+
+            // Check if within flashlight distance
+            if (distance > mode.distance) return false;
+
+            // Get direction camera is looking
+            const cameraDirection = new THREE.Vector3(0, 0, -1);
+            cameraDirection.applyQuaternion(camera.quaternion);
+
+            // Calculate angle between camera direction and monster direction
+            cameraToMonster.normalize();
+            const angle = Math.acos(cameraDirection.dot(cameraToMonster));
+
+            // Check if within spotlight cone angle
+            return angle < mode.angle;
+        }
+
+        // ===========================
+        // AUDIO FEEDBACK
+        // ===========================
+        function playStaticClick() {
+            // Simple click sound feedback
+            if (state.audioContext) {
+                const oscillator = state.audioContext.createOscillator();
+                const gainNode = state.audioContext.createGain();
+                oscillator.frequency.value = 800;
+                oscillator.type = 'square';
+                gainNode.gain.setValueAtTime(0.1, state.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.1);
+                oscillator.connect(gainNode);
+                gainNode.connect(state.audioContext.destination);
+                oscillator.start();
+                oscillator.stop(state.audioContext.currentTime + 0.1);
+            }
+        }
+
+        function playDetectionNoise() {
+            // Detection sound feedback
+            if (state.audioContext) {
+                const oscillator = state.audioContext.createOscillator();
+                const gainNode = state.audioContext.createGain();
+                oscillator.frequency.value = 1200;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0.15, state.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.2);
+                oscillator.connect(gainNode);
+                gainNode.connect(state.audioContext.destination);
+                oscillator.start();
+                oscillator.stop(state.audioContext.currentTime + 0.2);
+            }
+        }
+
+        // Initialize audio context
+        function initAudio() {
+            try {
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.warn('Web Audio API not supported');
             }
         }
 
