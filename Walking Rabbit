@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐰 搞怪兔子走路模拟器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .preview-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        #preview-canvas {
+            width: 100%;
+            max-width: 800px;
+            height: 300px;
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0 auto;
+            display: block;
+        }
+
+        .content {
+            padding: 40px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            color: #667eea;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .options {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+
+        .option {
+            flex: 0 0 140px;
+            height: 140px;
+            background: #f8f9fa;
+            border: 3px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .option:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+        }
+
+        .option.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: #667eea;
+            transform: translateY(-5px);
+        }
+
+        .option canvas {
+            width: 120px !important;
+            height: 120px !important;
+            display: block;
+        }
+
+        .keybind-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .keybind-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .keybind-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .keybind-input {
+            width: 60px;
+            padding: 8px;
+            text-align: center;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+        }
+
+        .start-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 18px 60px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+            display: block;
+            margin: 30px auto 0;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+        }
+
+        .start-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+        }
+
+        #game-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            min-width: 200px;
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 15px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+        }
+
+        .game-over h2 {
+            color: #667eea;
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="customization-screen">
+        <div class="container">
+            <div class="preview-section">
+                <h1>🐰 搞怪兔子走路模拟器</h1>
+                <p class="subtitle">真实物理模拟！掌握平衡，学会走路！</p>
+                <canvas id="preview-canvas"></canvas>
+            </div>
+
+            <div class="content">
+                <div class="section">
+                    <div class="section-title">腿型</div>
+                    <div class="options" id="leg-options">
+                        <div class="option" data-type="short">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                        <div class="option" data-type="normal">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                        <div class="option" data-type="long">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">手臂</div>
+                    <div class="options" id="arm-options">
+                        <div class="option" data-type="tiny">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                        <div class="option" data-type="normal">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                        <div class="option" data-type="long">
+                            <canvas width="120" height="120"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keybind-section">
+                    <div class="section-title">键位设置</div>
+                    <div class="keybind-grid">
+                        <div class="keybind-row">
+                            <label>左腿</label>
+                            <input type="text" class="keybind-input" id="key-left-leg" value="Q" maxlength="1">
+                        </div>
+                        <div class="keybind-row">
+                            <label>右腿</label>
+                            <input type="text" class="keybind-input" id="key-right-leg" value="W" maxlength="1">
+                        </div>
+                        <div class="keybind-row">
+                            <label>左手</label>
+                            <input type="text" class="keybind-input" id="key-left-arm" value="O" maxlength="1">
+                        </div>
+                        <div class="keybind-row">
+                            <label>右手</label>
+                            <input type="text" class="keybind-input" id="key-right-arm" value="P" maxlength="1">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="start-button" onclick="startGame()">开始游戏</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-screen">
+        <canvas id="game-canvas"></canvas>
+        <div class="hud">
+            <div>距离: <span id="distance">0.0</span>m</div>
+            <div style="margin-top: 10px;">倾斜: <span id="tilt">0</span>°</div>
+        </div>
+        <div class="controls-hint" id="controls-hint"></div>
+        <div class="game-over" id="game-over">
+            <h2>倒下了！</h2>
+            <p style="font-size: 1.5em; margin: 20px 0;">你走了 <span id="final-distance"></span> 米</p>
+            <button class="start-button" onclick="location.reload()">重新开始</button>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            legs: 'normal',
+            arms: 'normal',
+            keys: { leftLeg: 'Q', rightLeg: 'W', leftArm: 'O', rightArm: 'P' }
+        };
+
+        let previewScene, previewCamera, previewRenderer, previewBunny;
+        const optionScenes = {};
+
+        function initPreview() {
+            const canvas = document.getElementById('preview-canvas');
+            previewScene = new THREE.Scene();
+            previewScene.background = new THREE.Color(0x667eea);
+
+            previewCamera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+            previewCamera.position.set(5, 2, 0);
+            previewCamera.lookAt(0, 1, 0);
+
+            previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            previewRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            previewScene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 5);
+            previewScene.add(dirLight);
+
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(10, 10),
+                new THREE.MeshLambertMaterial({ color: 0x90EE90 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            previewScene.add(ground);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if (previewBunny) previewBunny.rotation.y += 0.01;
+                previewRenderer.render(previewScene, previewCamera);
+            }
+            animate();
+        }
+
+        function initOptions() {
+            const legTypes = ['short', 'normal', 'long'];
+            legTypes.forEach((type, i) => {
+                const canvas = document.querySelectorAll('#leg-options canvas')[i];
+                createOptionScene(canvas, 'leg', type);
+            });
+
+            const armTypes = ['tiny', 'normal', 'long'];
+            armTypes.forEach((type, i) => {
+                const canvas = document.querySelectorAll('#arm-options canvas')[i];
+                createOptionScene(canvas, 'arm', type);
+            });
+
+            function animateOptions() {
+                requestAnimationFrame(animateOptions);
+                Object.values(optionScenes).forEach(({ renderer, scene, camera, model }) => {
+                    model.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                });
+            }
+            animateOptions();
+        }
+
+        function createOptionScene(canvas, part, type) {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+            camera.position.set(2, 1, 0);
+            camera.lookAt(0, 0, 0);
+
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            renderer.setClearColor(0xffffff, 1);
+            renderer.setSize(120, 120);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(2, 2, 2);
+            scene.add(dirLight);
+
+            const model = createPartModel(part, type);
+            scene.add(model);
+
+            optionScenes[`${part}-${type}`] = { renderer, scene, camera, model };
+            renderer.render(scene, camera);
+        }
+
+        function createPartModel(part, type) {
+            const group = new THREE.Group();
+
+            if (part === 'leg') {
+                const params = {
+                    short: { length: 0.4, radius: 0.12, color: 0xff69b4 },
+                    normal: { length: 0.6, radius: 0.1, color: 0xff69b4 },
+                    long: { length: 0.8, radius: 0.08, color: 0xff1493 }
+                }[type];
+                const leg = new THREE.Mesh(
+                    new THREE.CylinderGeometry(params.radius, params.radius, params.length, 16),
+                    new THREE.MeshLambertMaterial({ color: params.color })
+                );
+                leg.position.y = -params.length / 2;
+                group.add(leg);
+                
+                // 脚掌
+                const foot = new THREE.Mesh(
+                    new THREE.BoxGeometry(params.radius * 3, params.radius * 0.8, params.radius * 4),
+                    new THREE.MeshLambertMaterial({ color: 0xff1493 })
+                );
+                foot.position.set(0, -params.length, params.radius * 1.5);
+                group.add(foot);
+            } else if (part === 'arm') {
+                const params = {
+                    tiny: { length: 0.25, radius: 0.06 },
+                    normal: { length: 0.45, radius: 0.08 },
+                    long: { length: 0.7, radius: 0.06 }
+                }[type];
+                const arm = new THREE.Mesh(
+                    new THREE.CylinderGeometry(params.radius, params.radius, params.length, 16),
+                    new THREE.MeshLambertMaterial({ color: 0xff69b4 })
+                );
+                group.add(arm);
+            }
+
+            return group;
+        }
+
+        function createBunny(cfg) {
+            const bunny = new THREE.Group();
+
+            // 身体
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.5, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0xffb6c1 })
+            );
+            body.position.y = 0.8;
+            bunny.add(body);
+            bunny.body = body;
+
+            // 头部
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.4, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0xffb6c1 })
+            );
+            head.position.y = 1.5;
+            bunny.add(head);
+
+            // 眼睛
+            [-0.15, 0.15].forEach(x => {
+                const eye = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.08, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: 0x000000 })
+                );
+                eye.position.set(x, 1.6, 0.35);
+                bunny.add(eye);
+            });
+
+            // 耳朵
+            [-0.2, 0.2].forEach((x, i) => {
+                const ear = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.08, 0.12, 0.6, 8),
+                    new THREE.MeshLambertMaterial({ color: 0xffb6c1 })
+                );
+                ear.position.set(x, 2.0, 0);
+                ear.rotation.z = i === 0 ? 0.2 : -0.2;
+                bunny.add(ear);
+            });
+
+            // 腿部参数
+            const legParams = {
+                short: { length: 0.6, radius: 0.15 },
+                normal: { length: 1.0, radius: 0.12 },
+                long: { length: 1.5, radius: 0.1 }
+            }[cfg.legs];
+
+            // 左腿组（包含关节、腿、脚掌）
+            const leftLegGroup = new THREE.Group();
+            leftLegGroup.position.set(-0.3, 0.5, 0);
+            
+            const leftLeg = new THREE.Mesh(
+                new THREE.CylinderGeometry(legParams.radius, legParams.radius, legParams.length, 8),
+                new THREE.MeshLambertMaterial({ color: 0xff69b4 })
+            );
+            leftLeg.position.y = -legParams.length / 2;
+            leftLeg.castShadow = true;
+            leftLegGroup.add(leftLeg);
+            
+            const leftFoot = new THREE.Mesh(
+                new THREE.BoxGeometry(legParams.radius * 3, legParams.radius * 0.8, legParams.radius * 4),
+                new THREE.MeshLambertMaterial({ color: 0xff1493 })
+            );
+            leftFoot.position.set(0, -legParams.length, legParams.radius * 1.5);
+            leftFoot.castShadow = true;
+            leftLegGroup.add(leftFoot);
+            
+            bunny.add(leftLegGroup);
+            bunny.leftLegGroup = leftLegGroup;
+            bunny.leftFoot = leftFoot;
+            
+            // 右腿组
+            const rightLegGroup = new THREE.Group();
+            rightLegGroup.position.set(0.3, 0.5, 0);
+            
+            const rightLeg = new THREE.Mesh(
+                new THREE.CylinderGeometry(legParams.radius, legParams.radius, legParams.length, 8),
+                new THREE.MeshLambertMaterial({ color: 0xff69b4 })
+            );
+            rightLeg.position.y = -legParams.length / 2;
+            rightLeg.castShadow = true;
+            rightLegGroup.add(rightLeg);
+            
+            const rightFoot = new THREE.Mesh(
+                new THREE.BoxGeometry(legParams.radius * 3, legParams.radius * 0.8, legParams.radius * 4),
+                new THREE.MeshLambertMaterial({ color: 0xff1493 })
+            );
+            rightFoot.position.set(0, -legParams.length, legParams.radius * 1.5);
+            rightFoot.castShadow = true;
+            rightLegGroup.add(rightFoot);
+            
+            bunny.add(rightLegGroup);
+            bunny.rightLegGroup = rightLegGroup;
+            bunny.rightFoot = rightFoot;
+
+            // 手臂
+            const armParams = {
+                tiny: { length: 0.3, radius: 0.08 },
+                normal: { length: 0.6, radius: 0.1 },
+                long: { length: 1.0, radius: 0.08 }
+            }[cfg.arms];
+
+            [-0.6, 0.6].forEach((x, i) => {
+                const armGroup = new THREE.Group();
+                armGroup.position.set(x, 1.0, 0);
+                
+                const arm = new THREE.Mesh(
+                    new THREE.CylinderGeometry(armParams.radius, armParams.radius, armParams.length, 8),
+                    new THREE.MeshLambertMaterial({ color: 0xff69b4 })
+                );
+                arm.position.y = -armParams.length / 2;
+                armGroup.add(arm);
+                
+                bunny.add(armGroup);
+                if (i === 0) bunny.leftArmGroup = armGroup;
+                else bunny.rightArmGroup = armGroup;
+            });
+
+            bunny.legParams = legParams;
+            bunny.armParams = armParams;
+            return bunny;
+        }
+
+        function updatePreview() {
+            if (previewBunny) previewScene.remove(previewBunny);
+            previewBunny = createBunny(config);
+            previewBunny.position.y = 1.5;
+            previewScene.add(previewBunny);
+        }
+
+        function setupOptions() {
+            ['leg', 'arm'].forEach(part => {
+                const container = document.getElementById(`${part}-options`);
+                container.querySelectorAll('.option').forEach(opt => {
+                    opt.addEventListener('click', () => {
+                        container.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+                        opt.classList.add('selected');
+                        config[part + 's'] = opt.dataset.type;
+                        updatePreview();
+                    });
+                });
+                container.querySelectorAll('.option')[1].click();
+            });
+
+            document.querySelectorAll('.keybind-input').forEach(input => {
+                input.addEventListener('keydown', e => {
+                    e.preventDefault();
+                    input.value = e.key.toUpperCase();
+                });
+            });
+        }
+
+        function startGame() {
+            config.keys.leftLeg = document.getElementById('key-left-leg').value.toUpperCase();
+            config.keys.rightLeg = document.getElementById('key-right-leg').value.toUpperCase();
+            config.keys.leftArm = document.getElementById('key-left-arm').value.toUpperCase();
+            config.keys.rightArm = document.getElementById('key-right-arm').value.toUpperCase();
+
+            document.getElementById('controls-hint').textContent = 
+                `${config.keys.leftLeg}/${config.keys.rightLeg}: 左腿/右腿 | ${config.keys.leftArm}/${config.keys.rightArm}: 左手/右手`;
+
+            document.getElementById('customization-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            
+            initGame();
+        }
+
+        let scene, camera, renderer, bunny;
+        let distance = 0, gameOver = false, keys = {};
+        let limbAngles = { leftLeg: 0, rightLeg: 0, leftArm: 0, rightArm: 0 };
+
+        function initGame() {
+            const canvas = document.getElementById('game-canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 30, 100);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(-5, 3, 0);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 20, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20;
+            dirLight.shadow.camera.bottom = -20;
+            scene.add(dirLight);
+
+            // 地面
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(200, 10),
+                new THREE.MeshLambertMaterial({ color: 0x90EE90 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // 网格
+            const gridHelper = new THREE.GridHelper(200, 40, 0x666666, 0x888888);
+            scene.add(gridHelper);
+
+            // 创建兔子
+            bunny = createBunny(config);
+            bunny.position.set(0, bunny.legParams.length + 0.5, 0);
+            bunny.rotation.y = Math.PI / 2; // 面向x轴正方向
+            
+            // 物理属性
+            bunny.velocity = new THREE.Vector3(0, 0, 0);
+            bunny.angularVelocity = new THREE.Vector3(0, 0, 0);
+            
+            scene.add(bunny);
+
+            window.addEventListener('keydown', e => keys[e.key.toUpperCase()] = true);
+            window.addEventListener('keyup', e => keys[e.key.toUpperCase()] = false);
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        function animate() {
+            if (gameOver) return;
+            requestAnimationFrame(animate);
+
+            const dt = 1/60;
+            const GRAVITY = -15;
+            const GROUND_Y = 0;
+
+            // 腿部控制
+            const legSpeed = 0.08;
+            const maxLegAngle = Math.PI / 3;
+
+            if (keys[config.keys.leftLeg]) {
+                limbAngles.leftLeg = Math.min(maxLegAngle, limbAngles.leftLeg + legSpeed);
+            } else {
+                limbAngles.leftLeg = Math.max(-maxLegAngle, limbAngles.leftLeg - legSpeed);
+            }
+
+            if (keys[config.keys.rightLeg]) {
+                limbAngles.rightLeg = Math.min(maxLegAngle, limbAngles.rightLeg + legSpeed);
+            } else {
+                limbAngles.rightLeg = Math.max(-maxLegAngle, limbAngles.rightLeg - legSpeed);
+            }
+
+            // 手臂控制
+            const armSpeed = 0.1;
+            const maxArmAngle = Math.PI / 2;
+
+            if (keys[config.keys.leftArm]) {
+                limbAngles.leftArm = Math.min(maxArmAngle, limbAngles.leftArm + armSpeed);
+            } else {
+                limbAngles.leftArm = Math.max(-maxArmAngle, limbAngles.leftArm - armSpeed);
+            }
+
+            if (keys[config.keys.rightArm]) {
+                limbAngles.rightArm = Math.min(maxArmAngle, limbAngles.rightArm + armSpeed);
+            } else {
+                limbAngles.rightArm = Math.max(-maxArmAngle, limbAngles.rightArm - armSpeed);
+            }
+
+            // 应用关节旋转
+            bunny.leftLegGroup.rotation.x = limbAngles.leftLeg;
+            bunny.rightLegGroup.rotation.x = limbAngles.rightLeg;
+            bunny.leftArmGroup.rotation.x = limbAngles.leftArm;
+            bunny.rightArmGroup.rotation.x = limbAngles.rightArm;
+
+            // 获取脚掌的世界坐标
+            const leftFootWorldPos = new THREE.Vector3();
+            const rightFootWorldPos = new THREE.Vector3();
+            bunny.leftFoot.getWorldPosition(leftFootWorldPos);
+            bunny.rightFoot.getWorldPosition(rightFootWorldPos);
+
+            // 计算重心（身体的世界位置）
+            const centerOfMass = new THREE.Vector3();
+            bunny.body.getWorldPosition(centerOfMass);
+
+            // 计算支撑中心
+            const supportCenter = new THREE.Vector3(
+                (leftFootWorldPos.x + rightFootWorldPos.x) / 2,
+                0,
+                (leftFootWorldPos.z + rightFootWorldPos.z) / 2
+            );
+
+            // 计算重心相对支撑点的偏移
+            const comOffset = new THREE.Vector3().copy(centerOfMass).sub(supportCenter);
+            comOffset.y = 0; // 只关心水平偏移
+
+            // 根据重心偏移产生力矩
+            const torqueFactor = 8.0;
+            const torqueX = -comOffset.z * torqueFactor;
+            const torqueZ = comOffset.x * torqueFactor;
+
+            // 应用角加速度
+            bunny.angularVelocity.x += torqueX * dt;
+            bunny.angularVelocity.z += torqueZ * dt;
+
+            // 角速度阻尼
+            bunny.angularVelocity.multiplyScalar(0.98);
+
+            // 应用旋转
+            bunny.rotation.x += bunny.angularVelocity.x * dt;
+            bunny.rotation.z += bunny.angularVelocity.z * dt;
+
+            // 腿部推进力
+            const pushForce = 5.0;
+            if (leftFootWorldPos.y <= GROUND_Y + 0.1 && limbAngles.leftLeg < 0) {
+                const pushDir = new THREE.Vector3(
+                    Math.cos(bunny.rotation.y) * Math.sin(limbAngles.leftLeg),
+                    0,
+                    Math.sin(bunny.rotation.y) * Math.sin(limbAngles.leftLeg)
+                );
+                bunny.velocity.add(pushDir.multiplyScalar(pushForce * dt));
+            }
+
+            if (rightFootWorldPos.y <= GROUND_Y + 0.1 && limbAngles.rightLeg < 0) {
+                const pushDir = new THREE.Vector3(
+                    Math.cos(bunny.rotation.y) * Math.sin(limbAngles.rightLeg),
+                    0,
+                    Math.sin(bunny.rotation.y) * Math.sin(limbAngles.rightLeg)
+                );
+                bunny.velocity.add(pushDir.multiplyScalar(pushForce * dt));
+            }
+
+            // 重力
+            bunny.velocity.y += GRAVITY * dt;
+
+            // 应用速度
+            bunny.position.add(new THREE.Vector3().copy(bunny.velocity).multiplyScalar(dt));
+
+            // 地面碰撞
+            const minFootY = Math.min(leftFootWorldPos.y, rightFootWorldPos.y);
+            if (bunny.position.y < bunny.legParams.length + 0.5 && minFootY <= GROUND_Y) {
+                bunny.position.y = bunny.legParams.length + 0.5;
+                bunny.velocity.y = Math.max(0, bunny.velocity.y);
+            }
+
+            // 摩擦力
+            bunny.velocity.x *= 0.95;
+            bunny.velocity.z *= 0.95;
+
+            // 更新距离
+            distance = Math.max(distance, bunny.position.x);
+            document.getElementById('distance').textContent = distance.toFixed(1);
+
+            // 倾斜度显示
+            const tiltDeg = Math.abs(bunny.rotation.x) * 180 / Math.PI;
+            document.getElementById('tilt').textContent = tiltDeg.toFixed(0);
+
+            // 倒下检测
+            if (Math.abs(bunny.rotation.x) > Math.PI / 3 || Math.abs(bunny.rotation.z) > Math.PI / 3 || bunny.position.y < 0.5) {
+                gameOver = true;
+                document.getElementById('final-distance').textContent = distance.toFixed(1);
+                document.getElementById('game-over').style.display = 'block';
+                return;
+            }
+
+            // 相机跟随
+            camera.position.x = bunny.position.x - 5;
+            camera.position.y = 3;
+            camera.position.z = bunny.position.z;
+            camera.lookAt(bunny.position.x, 2, bunny.position.z);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPreview();
+            setTimeout(() => {
+                initOptions();
+                setupOptions();
+            }, 300);
+        });
+    </script>
+</body>
+</html>
