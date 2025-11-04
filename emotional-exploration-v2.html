@@ -363,7 +363,8 @@
                     vertices: 12,
                     points: [],
                     flowField: [],
-                    colors: []
+                    colors: [],
+                    pullPoints: []  // Points being pulled/kneaded
                 };
 
                 this.initBlob();
@@ -375,11 +376,21 @@
                 this.gestureStartTime = 0;
                 this.isPinching = false;
                 this.initialPinchDistance = 0;
+                this.isKneading = false;
+                this.kneadingPoint = null;
+
+                // Combo/tap state
+                this.lastTapTime = 0;
+                this.comboCount = 0;
+                this.comboTimer = null;
+                this.showCombo = false;
+                this.comboFade = 0;
 
                 // Visual state
                 this.backgroundColor = { r: 245, g: 243, b: 240 };
                 this.particles = [];
                 this.time = 0;
+                this.shakeIntensity = 0;
 
                 this.setupEventListeners();
                 this.animate();
@@ -485,6 +496,12 @@
                     this.gestureStartTime = Date.now();
                     this.touchPath = [pos];
                     this.lastTouch = pos;
+
+                    // Check if touching blob area
+                    if (this.isTouchingBlob(pos)) {
+                        this.isKneading = true;
+                        this.kneadingPoint = this.getClosestBlobPoint(pos);
+                    }
                 } else if (e.touches.length === 2) {
                     // Two-finger pinch
                     this.isPinching = true;
@@ -507,6 +524,11 @@
                     const pos = this.getTouchPos(touch);
                     this.touchPath.push(pos);
                     this.lastTouch = pos;
+
+                    // Apply kneading effect
+                    if (this.isKneading && this.kneadingPoint !== null) {
+                        this.applyKneading(pos);
+                    }
                 }
             }
 
@@ -534,12 +556,15 @@
                 const velocity = distance / (duration / 1000);
 
                 // Classify gesture
-                if (duration > 400 && distance < 20) {
+                if (this.isKneading && distance > 20) {
+                    // Kneading / pulling
+                    this.handleKnead(this.touchPath, duration);
+                } else if (duration > 400 && distance < 20) {
                     // Press & hold
                     this.handlePress(this.touchStart, duration);
                 } else if (distance < 10 && duration < 150) {
-                    // Tap / poke
-                    this.handlePoke(this.touchStart);
+                    // Tap / poke (check for combo)
+                    this.handleTap(this.touchStart);
                 } else if (velocity > 600) {
                     // Flick
                     this.handleFlick(this.touchStart, this.lastTouch, velocity);
@@ -552,6 +577,8 @@
                 this.touchStart = null;
                 this.touchPath = [];
                 this.lastTouch = null;
+                this.isKneading = false;
+                this.kneadingPoint = null;
             }
 
             // Mouse events (desktop)
@@ -634,6 +661,98 @@
                 });
 
                 this.showGestureFeedback('poke');
+                this.updateUI();
+            }
+
+            handleTap(pos) {
+                const now = Date.now();
+                const timeSinceLastTap = now - this.lastTapTime;
+
+                // Combo detection: if tap within 500ms, it's a combo
+                if (timeSinceLastTap < 500) {
+                    this.comboCount++;
+                } else {
+                    this.comboCount = 1;
+                }
+
+                this.lastTapTime = now;
+
+                // Reset combo timer
+                clearTimeout(this.comboTimer);
+                this.comboTimer = setTimeout(() => {
+                    this.comboCount = 0;
+                    this.showCombo = false;
+                }, 1000);
+
+                // Show combo indicator
+                if (this.comboCount > 1) {
+                    this.showCombo = true;
+                    this.comboFade = 1.0;
+                }
+
+                // Apply effect based on combo count
+                const intensity = Math.min(2.0, 1.0 + (this.comboCount - 1) * 0.3);
+
+                // Stronger ripple for combos
+                this.blob.points.forEach((point, i) => {
+                    point.targetRadius = this.blob.baseRadius * (0.8 + Math.random() * 0.4 * intensity);
+                });
+
+                // Add shake effect for combos
+                this.shakeIntensity = Math.min(10, this.comboCount * 2);
+
+                // Create burst particles for combos
+                const rgb = this.blob.colors[this.blob.colors.length - 1] || { r: 200, g: 200, b: 220 };
+                const particleCount = 10 * this.comboCount;
+                const cx = this.canvas.width / 2;
+                const cy = this.canvas.height * 0.4;
+
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2;
+                    const speed = 3 + this.comboCount * 2;
+                    this.particles.push({
+                        x: cx,
+                        y: cy,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        life: 1,
+                        size: 2 + this.comboCount,
+                        color: rgb
+                    });
+                }
+
+                this.logEvent({
+                    type: 'tap',
+                    data: {
+                        position: [pos.x, pos.y],
+                        comboCount: this.comboCount,
+                        intensity: intensity
+                    }
+                });
+
+                this.showGestureFeedback(`tap ${this.comboCount > 1 ? 'x' + this.comboCount : ''}`);
+                this.updateUI();
+            }
+
+            handleKnead(path, duration) {
+                if (path.length < 2) return;
+
+                const start = path[0];
+                const end = path[path.length - 1];
+                const direction = this.normalize(end.x - start.x, end.y - start.y);
+                const pathLength = this.getPathLength(path);
+
+                this.logEvent({
+                    type: 'knead',
+                    data: {
+                        direction: [direction.x, direction.y],
+                        intensity: Math.min(1, pathLength / 150),
+                        duration,
+                        pathLength: Math.round(pathLength)
+                    }
+                });
+
+                this.showGestureFeedback('knead');
                 this.updateUI();
             }
 
@@ -1015,13 +1134,51 @@
                 // Update and draw particles
                 this.updateParticles();
 
+                // Draw combo indicator
+                if (this.showCombo && this.comboCount > 1) {
+                    this.comboFade -= 0.02;
+                    if (this.comboFade <= 0) {
+                        this.showCombo = false;
+                    } else {
+                        const cx = this.canvas.width / 2;
+                        const cy = this.canvas.height * 0.4;
+
+                        this.ctx.save();
+                        this.ctx.font = `bold ${40 + this.comboCount * 5}px Arial`;
+                        this.ctx.textAlign = 'center';
+                        this.ctx.textBaseline = 'middle';
+
+                        // Combo text with glow
+                        this.ctx.shadowColor = 'rgba(255, 200, 0, 0.8)';
+                        this.ctx.shadowBlur = 20;
+                        this.ctx.fillStyle = `rgba(255, 220, 50, ${this.comboFade})`;
+                        this.ctx.fillText(`×${this.comboCount}`, cx, cy - 80);
+
+                        // Combo label
+                        this.ctx.font = '20px Arial';
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.fillStyle = `rgba(255, 255, 255, ${this.comboFade * 0.8})`;
+                        this.ctx.fillText('COMBO', cx, cy - 120);
+
+                        this.ctx.restore();
+                    }
+                }
+
                 requestAnimationFrame(() => this.animate());
             }
 
             drawBlob() {
                 // Always draw blob at screen center (40% from top)
-                const cx = this.canvas.width / 2;
-                const cy = this.canvas.height * 0.4;
+                let cx = this.canvas.width / 2;
+                let cy = this.canvas.height * 0.4;
+
+                // Apply shake effect
+                if (this.shakeIntensity > 0) {
+                    cx += (Math.random() - 0.5) * this.shakeIntensity;
+                    cy += (Math.random() - 0.5) * this.shakeIntensity;
+                    this.shakeIntensity *= 0.9; // Decay shake
+                }
+
                 const baseSize = Math.min(this.canvas.width, this.canvas.height) * this.blob.baseRadius;
 
                 this.ctx.save();
@@ -1101,6 +1258,59 @@
                         color
                     });
                 }
+            }
+
+            // Kneading functions
+            isTouchingBlob(pos) {
+                // Check if touch is within blob radius
+                const cx = 0.5;
+                const cy = 0.4;
+                const dx = pos.x - cx;
+                const dy = pos.y - cy;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < this.blob.baseRadius * 1.2;
+            }
+
+            getClosestBlobPoint(pos) {
+                // Find the blob vertex closest to touch position
+                const cx = 0.5;
+                const cy = 0.4;
+                const angle = Math.atan2(pos.y - cy, pos.x - cx);
+
+                let closestIndex = 0;
+                let minDiff = Math.PI * 2;
+
+                this.blob.points.forEach((point, i) => {
+                    let diff = Math.abs(angle - point.angle);
+                    if (diff > Math.PI) diff = Math.PI * 2 - diff;
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                });
+
+                return closestIndex;
+            }
+
+            applyKneading(pos) {
+                // Pull the closest blob points toward touch position
+                const cx = 0.5;
+                const cy = 0.4;
+                const dx = pos.x - cx;
+                const dy = pos.y - cy;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const pullStrength = Math.min(1.5, distance / this.blob.baseRadius);
+
+                // Affect nearby points
+                this.blob.points.forEach((point, i) => {
+                    const angleDiff = Math.abs(point.angle - Math.atan2(dy, dx));
+                    const normalizedDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+                    if (normalizedDiff < Math.PI / 3) { // Affect points within 60 degrees
+                        const influence = 1 - (normalizedDiff / (Math.PI / 3));
+                        point.targetRadius = this.blob.baseRadius * (1 + pullStrength * 0.3 * influence);
+                    }
+                });
             }
 
             // Utility functions
