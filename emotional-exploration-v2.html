@@ -409,7 +409,11 @@
                         angle,
                         radius: this.blob.baseRadius,
                         targetRadius: this.blob.baseRadius,
-                        noiseOffset: Math.random() * 100
+                        noiseOffset: Math.random() * 100,
+                        offsetX: 0,  // X offset for playdough effect
+                        offsetY: 0,  // Y offset for playdough effect
+                        targetOffsetX: 0,
+                        targetOffsetY: 0
                     });
                 }
                 this.blob.colors = [{ r: 200, g: 200, b: 220, a: 0.3 }];
@@ -588,6 +592,12 @@
                 this.gestureStartTime = Date.now();
                 this.touchPath = [pos];
                 this.lastTouch = pos;
+
+                // Check if touching blob area for kneading
+                if (this.isTouchingBlob(pos)) {
+                    this.isKneading = true;
+                    this.kneadingPoint = this.getClosestBlobPoint(pos);
+                }
             }
 
             onMouseMove(e) {
@@ -595,6 +605,11 @@
                 const pos = this.getMousePos(e);
                 this.touchPath.push(pos);
                 this.lastTouch = pos;
+
+                // Apply kneading effect for mouse drag
+                if (this.isKneading && this.kneadingPoint !== null) {
+                    this.applyKneading(pos);
+                }
             }
 
             onMouseUp(e) {
@@ -604,10 +619,14 @@
                 const distance = this.getDistance(this.touchStart, this.lastTouch);
                 const velocity = distance / (duration / 1000);
 
-                if (duration > 400 && distance < 20) {
+                // Classify gesture
+                if (this.isKneading && distance > 20) {
+                    // Kneading / pulling
+                    this.handleKnead(this.touchPath, duration);
+                } else if (duration > 400 && distance < 20) {
                     this.handlePress(this.touchStart, duration);
                 } else if (distance < 10 && duration < 150) {
-                    this.handlePoke(this.touchStart);
+                    this.handleTap(this.touchStart);
                 } else if (velocity > 600) {
                     this.handleFlick(this.touchStart, this.lastTouch, velocity);
                 } else if (distance > 40) {
@@ -616,6 +635,8 @@
 
                 this.touchStart = null;
                 this.touchPath = [];
+                this.isKneading = false;
+                this.kneadingPoint = null;
             }
 
             // Gesture handlers
@@ -1126,6 +1147,17 @@
                     const noise = Math.sin(this.time + point.noiseOffset) * 0.02;
                     point.radius += (point.targetRadius - point.radius) * 0.1;
                     point.angle += 0.001;
+
+                    // Update playdough offsets with smooth interpolation
+                    point.offsetX += (point.targetOffsetX - point.offsetX) * 0.15;
+                    point.offsetY += (point.targetOffsetY - point.offsetY) * 0.15;
+
+                    // If not being kneaded, slowly return to zero
+                    if (!this.isKneading) {
+                        point.targetOffsetX *= 0.92;
+                        point.targetOffsetY *= 0.92;
+                        point.targetRadius += (this.blob.baseRadius - point.targetRadius) * 0.08;
+                    }
                 });
 
                 // Draw blob
@@ -1192,20 +1224,26 @@
                 this.ctx.fillStyle = gradient;
                 this.ctx.fillRect(-baseSize * 2, -baseSize * 2, baseSize * 4, baseSize * 4);
 
-                // Draw blob shape
+                // Draw blob shape with playdough deformation
                 this.ctx.beginPath();
                 this.blob.points.forEach((point, i) => {
                     const radius = baseSize * point.radius * this.blob.density;
-                    const x = Math.cos(point.angle) * radius;
-                    const y = Math.sin(point.angle) * radius;
+                    // Base position from angle and radius
+                    const baseX = Math.cos(point.angle) * radius;
+                    const baseY = Math.sin(point.angle) * radius;
+                    // Add offset for playdough effect
+                    const x = baseX + point.offsetX;
+                    const y = baseY + point.offsetY;
 
                     if (i === 0) {
                         this.ctx.moveTo(x, y);
                     } else {
                         const prevPoint = this.blob.points[i - 1];
                         const prevRadius = baseSize * prevPoint.radius * this.blob.density;
-                        const prevX = Math.cos(prevPoint.angle) * prevRadius;
-                        const prevY = Math.sin(prevPoint.angle) * prevRadius;
+                        const prevBaseX = Math.cos(prevPoint.angle) * prevRadius;
+                        const prevBaseY = Math.sin(prevPoint.angle) * prevRadius;
+                        const prevX = prevBaseX + prevPoint.offsetX;
+                        const prevY = prevBaseY + prevPoint.offsetY;
 
                         const cpX = (prevX + x) / 2;
                         const cpY = (prevY + y) / 2;
@@ -1293,22 +1331,55 @@
             }
 
             applyKneading(pos) {
-                // Pull the closest blob points toward touch position
-                const cx = 0.5;
-                const cy = 0.4;
-                const dx = pos.x - cx;
-                const dy = pos.y - cy;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                const pullStrength = Math.min(1.5, distance / this.blob.baseRadius);
+                // Convert normalized position to canvas pixels
+                const touchX = pos.x * this.canvas.width;
+                const touchY = pos.y * this.canvas.height;
 
-                // Affect nearby points
+                // Blob center in pixels
+                const blobCenterX = this.canvas.width / 2;
+                const blobCenterY = this.canvas.height * 0.4;
+
+                // Calculate pull vector (from blob center to touch)
+                const pullX = touchX - blobCenterX;
+                const pullY = touchY - blobCenterY;
+                const pullDistance = Math.sqrt(pullX * pullX + pullY * pullY);
+
+                if (pullDistance < 10) return; // Too close to center
+
+                // Normalize pull direction
+                const pullDirX = pullX / pullDistance;
+                const pullDirY = pullY / pullDistance;
+
+                // Pull angle
+                const pullAngle = Math.atan2(pullY, pullX);
+
+                const baseSize = Math.min(this.canvas.width, this.canvas.height) * this.blob.baseRadius;
+
+                // Apply deformation to all points based on proximity
                 this.blob.points.forEach((point, i) => {
-                    const angleDiff = Math.abs(point.angle - Math.atan2(dy, dx));
-                    const normalizedDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+                    // Calculate angular difference
+                    let angleDiff = Math.abs(point.angle - pullAngle);
+                    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
 
-                    if (normalizedDiff < Math.PI / 3) { // Affect points within 60 degrees
-                        const influence = 1 - (normalizedDiff / (Math.PI / 3));
-                        point.targetRadius = this.blob.baseRadius * (1 + pullStrength * 0.3 * influence);
+                    // Influence based on angular proximity (wider range for more dramatic effect)
+                    const maxInfluenceAngle = Math.PI / 2; // 90 degrees on each side
+                    if (angleDiff < maxInfluenceAngle) {
+                        const influence = Math.cos(angleDiff / maxInfluenceAngle * Math.PI / 2); // Smooth falloff
+
+                        // Calculate pull strength (stronger when pulling further out)
+                        const pullStrength = Math.min(1.0, pullDistance / (baseSize * 1.5));
+
+                        // Apply offset in the pull direction
+                        const offsetMagnitude = baseSize * pullStrength * influence * 0.6;
+                        point.targetOffsetX = pullDirX * offsetMagnitude;
+                        point.targetOffsetY = pullDirY * offsetMagnitude;
+
+                        // Also slightly increase radius for pulled points
+                        point.targetRadius = this.blob.baseRadius * (1 + influence * 0.2);
+                    } else {
+                        // Points on opposite side compress slightly
+                        const oppositeInfluence = Math.max(0, -Math.cos(angleDiff));
+                        point.targetRadius = this.blob.baseRadius * (1 - oppositeInfluence * 0.15);
                     }
                 });
             }
