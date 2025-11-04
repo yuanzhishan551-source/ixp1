@@ -195,7 +195,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 1);
             z-index: 1000;
             display: none;
             align-items: center;
@@ -210,40 +210,56 @@
         }
 
         .generation-content {
-            width: 90%;
-            max-width: 600px;
-            background: white;
-            border-radius: 20px;
-            padding: 20px;
-            text-align: center;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #output-canvas {
-            width: 100%;
-            border-radius: 12px;
-            margin: 20px 0;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            animation: artEnter 1.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        @keyframes artEnter {
+            0% {
+                opacity: 0;
+                transform: scale(0.8) rotate(-5deg);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) rotate(0deg);
+            }
         }
 
         .modal-buttons {
+            position: fixed;
+            bottom: env(safe-area-inset-bottom, 20px);
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
             gap: 12px;
-            margin-top: 20px;
+            z-index: 1001;
         }
 
         .modal-button {
-            flex: 1;
-            padding: 14px;
+            padding: 14px 28px;
             border: none;
-            border-radius: 12px;
+            border-radius: 28px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 200ms ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
 
         .modal-button.primary {
-            background: #667eea;
+            background: rgba(102, 126, 234, 0.9);
             color: white;
         }
 
@@ -391,6 +407,13 @@
                 this.particles = [];
                 this.time = 0;
                 this.shakeIntensity = 0;
+
+                // Generation animation state
+                this.isGenerating = false;
+                this.generationTime = 0;
+                this.generatedFeatures = null;
+                this.outputCanvas = null;
+                this.outputCtx = null;
 
                 this.setupEventListeners();
                 this.animate();
@@ -862,20 +885,25 @@
             // Generate geometry
             async generate() {
                 const modal = document.getElementById('generationModal');
-                const outputCanvas = document.getElementById('output-canvas');
-                const ctx = outputCanvas.getContext('2d');
+                this.outputCanvas = document.getElementById('output-canvas');
+                this.outputCtx = this.outputCanvas.getContext('2d');
+
+                // Set canvas to window size
+                this.outputCanvas.width = window.innerWidth;
+                this.outputCanvas.height = window.innerHeight;
 
                 modal.classList.add('show');
                 document.getElementById('generateButton').classList.add('generating');
 
                 // Extract features
-                const features = this.extractFeatures();
+                this.generatedFeatures = this.extractFeatures();
 
                 // Wait a bit for effect
                 await new Promise(resolve => setTimeout(resolve, 800));
 
-                // Generate geometry
-                this.generateGeometry(ctx, features);
+                // Start animation
+                this.isGenerating = true;
+                this.generationTime = 0;
 
                 document.getElementById('generateButton').classList.remove('generating');
             }
@@ -951,12 +979,13 @@
                 };
             }
 
-            generateGeometry(ctx, features) {
+            generateGeometry(ctx, features, animTime = 0) {
                 const w = ctx.canvas.width;
                 const h = ctx.canvas.height;
 
-                // Clear canvas
-                ctx.fillStyle = '#F5F3F0';
+                // Clear canvas with animated background
+                const bgShift = Math.sin(animTime * 0.5) * 5;
+                ctx.fillStyle = `rgb(${245 + bgShift}, ${243 + bgShift}, ${240 + bgShift})`;
                 ctx.fillRect(0, 0, w, h);
 
                 // Build palette from selected words
@@ -965,30 +994,38 @@
                 // Generate based on motif type
                 const centerX = w / 2;
                 const centerY = h / 2;
-                const angle = Math.atan2(features.dominantDirection.y, features.dominantDirection.x);
+                const angle = Math.atan2(features.dominantDirection.y, features.dominantDirection.x) + animTime * 0.1;
+
+                ctx.save();
+                // Global rotation animation
+                ctx.translate(centerX, centerY);
+                ctx.rotate(Math.sin(animTime * 0.3) * 0.05);
+                ctx.translate(-centerX, -centerY);
 
                 switch (features.motifType) {
                     case 'radial':
-                        this.drawRadialMotif(ctx, centerX, centerY, palette, features, angle);
+                        this.drawRadialMotif(ctx, centerX, centerY, palette, features, angle, animTime);
                         break;
                     case 'concentric':
-                        this.drawConcentricMotif(ctx, centerX, centerY, palette, features);
+                        this.drawConcentricMotif(ctx, centerX, centerY, palette, features, animTime);
                         break;
                     case 'cluster':
-                        this.drawClusterMotif(ctx, w, h, palette, features);
+                        this.drawClusterMotif(ctx, w, h, palette, features, animTime);
                         break;
                     case 'streak':
-                        this.drawStreakMotif(ctx, w, h, palette, features, angle);
+                        this.drawStreakMotif(ctx, w, h, palette, features, angle, animTime);
                         break;
                     case 'organic':
-                        this.drawOrganicMotif(ctx, centerX, centerY, palette, features);
+                        this.drawOrganicMotif(ctx, centerX, centerY, palette, features, animTime);
                         break;
                     default:
-                        this.drawHybridMotif(ctx, w, h, palette, features);
+                        this.drawHybridMotif(ctx, w, h, palette, features, animTime);
                 }
 
+                ctx.restore();
+
                 // Add word-specific effects
-                this.applyWordEffects(ctx, w, h, features);
+                this.applyWordEffects(ctx, w, h, features, animTime);
 
                 // Add subtle texture
                 this.addTexture(ctx, w, h);
@@ -1016,11 +1053,13 @@
                 return colors.length > 0 ? colors : ['#888888', '#999999', '#AAAAAA'];
             }
 
-            drawRadialMotif(ctx, cx, cy, palette, features, angle) {
+            drawRadialMotif(ctx, cx, cy, palette, features, angle, animTime = 0) {
                 const numArcs = Math.floor(8 + features.densityMetric * 12);
 
                 for (let i = 0; i < numArcs; i++) {
-                    const radius = 200 + i * (400 / numArcs);
+                    // Pulsing radius animation
+                    const pulse = Math.sin(animTime * 2 + i * 0.5) * 10;
+                    const radius = 200 + i * (400 / numArcs) + pulse;
                     const startAngle = angle - (features.avgIntensity * 0.5) + this.seededRandom() * 0.3;
                     const endAngle = startAngle + (0.4 + features.avgIntensity * 0.6);
                     const strokeWidth = 8 + (1 - i / numArcs) * 20;
@@ -1029,30 +1068,34 @@
                     ctx.arc(cx, cy, radius, startAngle, endAngle);
                     ctx.strokeStyle = palette[i % palette.length];
                     ctx.lineWidth = strokeWidth;
-                    ctx.globalAlpha = 0.6 - (i / numArcs) * 0.3;
+                    // Pulsing opacity
+                    const alphaPulse = Math.sin(animTime * 1.5 + i * 0.3) * 0.1;
+                    ctx.globalAlpha = 0.6 - (i / numArcs) * 0.3 + alphaPulse;
                     ctx.stroke();
                 }
                 ctx.globalAlpha = 1;
             }
 
-            drawConcentricMotif(ctx, cx, cy, palette, features) {
+            drawConcentricMotif(ctx, cx, cy, palette, features, animTime = 0) {
                 const numRings = Math.floor(6 + features.densityMetric * 10);
 
                 for (let i = 0; i < numRings; i++) {
-                    const radius = 60 + i * (500 / numRings);
+                    // Expanding/contracting animation
+                    const wave = Math.sin(animTime * 1.5 - i * 0.4) * 15;
+                    const radius = 60 + i * (500 / numRings) + wave;
                     const strokeWidth = 3 + features.avgIntensity * 8;
 
                     ctx.beginPath();
                     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
                     ctx.strokeStyle = palette[i % palette.length];
-                    ctx.lineWidth = strokeWidth;
+                    ctx.lineWidth = strokeWidth + Math.sin(animTime + i) * 2;
                     ctx.globalAlpha = 0.7 - (i / numRings) * 0.4;
                     ctx.stroke();
                 }
                 ctx.globalAlpha = 1;
             }
 
-            drawClusterMotif(ctx, w, h, palette, features) {
+            drawClusterMotif(ctx, w, h, palette, features, animTime = 0) {
                 const numClusters = Math.floor(3 + features.densityMetric * 5);
 
                 for (let c = 0; c < numClusters; c++) {
@@ -1065,17 +1108,22 @@
                         const offsetY = (this.seededRandom() - 0.5) * 120;
                         const radius = 10 + this.seededRandom() * 40;
 
+                        // Pulsing animation for radius and alpha
+                        const pulse = Math.sin(animTime * 2 + c * 0.5 + i * 0.2) * 0.2;
+                        const animRadius = radius * (1 + pulse);
+                        const alphaPulse = Math.sin(animTime * 1.5 + c * 0.3 + i * 0.15) * 0.15;
+
                         ctx.beginPath();
-                        ctx.arc(clusterX + offsetX, clusterY + offsetY, radius, 0, Math.PI * 2);
+                        ctx.arc(clusterX + offsetX, clusterY + offsetY, animRadius, 0, Math.PI * 2);
                         ctx.fillStyle = palette[i % palette.length];
-                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.3;
+                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.3 + alphaPulse;
                         ctx.fill();
                     }
                 }
                 ctx.globalAlpha = 1;
             }
 
-            drawStreakMotif(ctx, w, h, palette, features, angle) {
+            drawStreakMotif(ctx, w, h, palette, features, angle, animTime = 0) {
                 const numStreaks = Math.floor(12 + features.densityMetric * 20);
 
                 for (let i = 0; i < numStreaks; i++) {
@@ -1083,9 +1131,18 @@
                     const startY = this.seededRandom() * h;
                     const length = 80 + features.avgIntensity * 200;
                     const localAngle = angle + (this.seededRandom() - 0.5) * 0.4;
-                    const endX = startX + Math.cos(localAngle) * length;
-                    const endY = startY + Math.sin(localAngle) * length;
+
+                    // Flowing animation - shift length and position
+                    const lengthShift = Math.sin(animTime * 1.5 + i * 0.3) * 30;
+                    const animLength = length + lengthShift;
+                    const posShift = Math.sin(animTime * 1.2 + i * 0.4) * 15;
+
+                    const endX = startX + Math.cos(localAngle) * animLength + Math.cos(localAngle + Math.PI / 2) * posShift;
+                    const endY = startY + Math.sin(localAngle) * animLength + Math.sin(localAngle + Math.PI / 2) * posShift;
                     const strokeWidth = 2 + this.seededRandom() * 6;
+
+                    // Alpha pulse
+                    const alphaPulse = Math.sin(animTime * 2 + i * 0.25) * 0.15;
 
                     ctx.beginPath();
                     ctx.moveTo(startX, startY);
@@ -1093,42 +1150,52 @@
                     ctx.strokeStyle = palette[i % palette.length];
                     ctx.lineWidth = strokeWidth;
                     ctx.lineCap = 'round';
-                    ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3;
+                    ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3 + alphaPulse;
                     ctx.stroke();
                 }
                 ctx.globalAlpha = 1;
             }
 
-            drawHybridMotif(ctx, w, h, palette, features) {
+            drawHybridMotif(ctx, w, h, palette, features, animTime = 0) {
                 // Combine multiple styles
                 const cx = w / 2;
                 const cy = h / 2;
 
-                // Some circles
+                // Some circles with pulsing
                 for (let i = 0; i < 5; i++) {
                     const radius = 100 + i * 80;
+                    const pulse = Math.sin(animTime * 2 + i * 0.6) * 15;
+                    const animRadius = radius + pulse;
+                    const alphaPulse = Math.sin(animTime * 1.5 + i * 0.4) * 0.15;
+
                     ctx.beginPath();
-                    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                    ctx.arc(cx, cy, animRadius, 0, Math.PI * 2);
                     ctx.strokeStyle = palette[i % palette.length];
                     ctx.lineWidth = 4;
-                    ctx.globalAlpha = 0.5;
+                    ctx.globalAlpha = 0.5 + alphaPulse;
                     ctx.stroke();
                 }
 
-                // Some shapes
+                // Some shapes with floating motion
                 for (let i = 0; i < 10; i++) {
                     const x = 200 + this.seededRandom() * (w - 400);
                     const y = 400 + this.seededRandom() * (h - 800);
                     const size = 30 + this.seededRandom() * 60;
 
+                    // Floating animation
+                    const floatX = Math.sin(animTime * 1.2 + i * 0.5) * 20;
+                    const floatY = Math.cos(animTime * 0.8 + i * 0.3) * 15;
+                    const animX = x + floatX;
+                    const animY = y + floatY;
+
                     ctx.fillStyle = palette[i % palette.length];
                     ctx.globalAlpha = 0.4;
 
                     if (i % 2 === 0) {
-                        ctx.fillRect(x, y, size, size);
+                        ctx.fillRect(animX, animY, size, size);
                     } else {
                         ctx.beginPath();
-                        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                        ctx.arc(animX, animY, size / 2, 0, Math.PI * 2);
                         ctx.fill();
                     }
                 }
@@ -1136,7 +1203,7 @@
                 ctx.globalAlpha = 1;
             }
 
-            drawOrganicMotif(ctx, cx, cy, palette, features) {
+            drawOrganicMotif(ctx, cx, cy, palette, features, animTime = 0) {
                 // Draw shape based on blob deformation
                 if (!features.blobShape || features.blobShape.length === 0) return;
 
@@ -1145,10 +1212,17 @@
                 ctx.save();
                 ctx.translate(cx, cy);
 
+                // Add rotation animation
+                const rotation = Math.sin(animTime * 0.5) * 0.1;
+                ctx.rotate(rotation);
+
                 // Draw multiple layers of the organic shape
                 for (let layer = 0; layer < 3; layer++) {
                     ctx.beginPath();
-                    const layerScale = scale * (1 + layer * 0.3);
+
+                    // Pulsing scale animation
+                    const scalePulse = Math.sin(animTime * 1.5 + layer * 0.5) * 0.1;
+                    const layerScale = scale * (1 + layer * 0.3) * (1 + scalePulse);
 
                     features.blobShape.forEach((point, i) => {
                         const r = layerScale * point.radius;
@@ -1163,9 +1237,12 @@
                     });
                     ctx.closePath();
 
+                    // Pulsing alpha
+                    const alphaPulse = Math.sin(animTime * 2 + layer * 0.4) * 0.1;
+
                     ctx.strokeStyle = palette[layer % palette.length];
                     ctx.lineWidth = 8 - layer * 2;
-                    ctx.globalAlpha = 0.6 - layer * 0.15;
+                    ctx.globalAlpha = 0.6 - layer * 0.15 + alphaPulse;
                     ctx.stroke();
                 }
 
@@ -1173,38 +1250,51 @@
                 ctx.globalAlpha = 1;
             }
 
-            applyWordEffects(ctx, w, h, features) {
+            applyWordEffects(ctx, w, h, features, animTime = 0) {
                 const cx = w / 2;
                 const cy = h / 2;
 
-                // Sharp: Add spikes
+                // Sharp: Add spikes with rotation
                 if (features.selectedWords.includes('sharp')) {
                     const numSpikes = 20 + Math.floor(features.avgIntensity * 15);
                     ctx.save();
+                    ctx.translate(cx, cy);
+
+                    // Rotate spikes
+                    const rotation = animTime * 0.3;
+                    ctx.rotate(rotation);
+                    ctx.translate(-cx, -cy);
 
                     for (let i = 0; i < numSpikes; i++) {
                         const angle = (i / numSpikes) * Math.PI * 2;
                         const baseRadius = 150 + this.seededRandom() * 200;
                         const spikeLength = 40 + this.seededRandom() * 80;
 
+                        // Pulsing spike length
+                        const lengthPulse = Math.sin(animTime * 2.5 + i * 0.3) * 15;
+                        const animSpikeLength = spikeLength + lengthPulse;
+
                         const x1 = cx + Math.cos(angle) * baseRadius;
                         const y1 = cy + Math.sin(angle) * baseRadius;
-                        const x2 = cx + Math.cos(angle) * (baseRadius + spikeLength);
-                        const y2 = cy + Math.sin(angle) * (baseRadius + spikeLength);
+                        const x2 = cx + Math.cos(angle) * (baseRadius + animSpikeLength);
+                        const y2 = cy + Math.sin(angle) * (baseRadius + animSpikeLength);
+
+                        // Pulsing alpha
+                        const alphaPulse = Math.sin(animTime * 3 + i * 0.2) * 0.15;
 
                         ctx.beginPath();
                         ctx.moveTo(x1, y1);
                         ctx.lineTo(x2, y2);
                         ctx.strokeStyle = '#00A8B8';
                         ctx.lineWidth = 2 + this.seededRandom() * 4;
-                        ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3;
+                        ctx.globalAlpha = 0.5 + this.seededRandom() * 0.3 + alphaPulse;
                         ctx.stroke();
                     }
 
                     ctx.restore();
                 }
 
-                // Rough: Add jagged, uneven lines
+                // Rough: Add jagged, uneven lines with wiggle
                 if (features.selectedWords.includes('rough')) {
                     const numLines = 15;
                     ctx.save();
@@ -1216,28 +1306,32 @@
                         const endX = startX + (this.seededRandom() - 0.5) * 300;
                         const endY = startY + (this.seededRandom() - 0.5) * 300;
 
-                        // Create jagged path
+                        // Create jagged path with wiggle animation
                         ctx.moveTo(startX, startY);
                         const segments = 8 + Math.floor(this.seededRandom() * 8);
                         for (let s = 1; s <= segments; s++) {
                             const t = s / segments;
-                            const x = startX + (endX - startX) * t + (this.seededRandom() - 0.5) * 40;
-                            const y = startY + (endY - startY) * t + (this.seededRandom() - 0.5) * 40;
+                            const wiggle = Math.sin(animTime * 2 + i * 0.5 + s * 0.4) * 8;
+                            const x = startX + (endX - startX) * t + (this.seededRandom() - 0.5) * 40 + wiggle;
+                            const y = startY + (endY - startY) * t + (this.seededRandom() - 0.5) * 40 + wiggle;
                             ctx.lineTo(x, y);
                         }
+
+                        // Pulsing alpha
+                        const alphaPulse = Math.sin(animTime * 1.8 + i * 0.3) * 0.1;
 
                         ctx.strokeStyle = '#C17B5C';
                         ctx.lineWidth = 3 + this.seededRandom() * 5;
                         ctx.lineCap = 'round';
                         ctx.lineJoin = 'round';
-                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.2;
+                        ctx.globalAlpha = 0.4 + this.seededRandom() * 0.2 + alphaPulse;
                         ctx.stroke();
                     }
 
                     ctx.restore();
                 }
 
-                // Heavy: Add dense dark shapes
+                // Heavy: Add dense dark shapes with sinking motion
                 if (features.selectedWords.includes('heavy')) {
                     ctx.save();
                     const numShapes = 30;
@@ -1247,15 +1341,22 @@
                         const y = cy + (this.seededRandom() - 0.5) * 600;
                         const size = 10 + this.seededRandom() * 40;
 
+                        // Sinking/floating motion (slow vertical oscillation)
+                        const sinkY = Math.sin(animTime * 0.8 + i * 0.4) * 10;
+                        const animY = y + sinkY;
+
+                        // Pulsing alpha to give weight feeling
+                        const alphaPulse = Math.sin(animTime * 1.2 + i * 0.3) * 0.1;
+
                         ctx.fillStyle = '#4A4A4A';
-                        ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3;
-                        ctx.fillRect(x - size/2, y - size/2, size, size);
+                        ctx.globalAlpha = 0.3 + this.seededRandom() * 0.3 + alphaPulse;
+                        ctx.fillRect(x - size/2, animY - size/2, size, size);
                     }
 
                     ctx.restore();
                 }
 
-                // Light: Add airy, scattered dots
+                // Light: Add airy, scattered dots with twinkling
                 if (features.selectedWords.includes('light')) {
                     ctx.save();
                     const numDots = 100;
@@ -1265,34 +1366,54 @@
                         const y = this.seededRandom() * h;
                         const size = 1 + this.seededRandom() * 4;
 
+                        // Twinkling animation (size and alpha pulse)
+                        const twinkle = Math.sin(animTime * 3 + i * 0.15) * 0.3;
+                        const animSize = size * (1 + twinkle);
+                        const alphaTwinkle = Math.sin(animTime * 2.5 + i * 0.2) * 0.2;
+
+                        // Gentle floating motion
+                        const floatY = Math.sin(animTime * 1.5 + i * 0.1) * 3;
+
                         ctx.beginPath();
-                        ctx.arc(x, y, size, 0, Math.PI * 2);
+                        ctx.arc(x, y + floatY, animSize, 0, Math.PI * 2);
                         ctx.fillStyle = '#EBE4D8';
-                        ctx.globalAlpha = 0.2 + this.seededRandom() * 0.4;
+                        ctx.globalAlpha = 0.2 + this.seededRandom() * 0.4 + alphaTwinkle;
                         ctx.fill();
                     }
 
                     ctx.restore();
                 }
 
-                // Warm: Add warm gradients
+                // Warm: Add warm gradients with pulsing
                 if (features.selectedWords.includes('warm')) {
                     ctx.save();
-                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500);
-                    gradient.addColorStop(0, 'rgba(212, 165, 116, 0.15)');
-                    gradient.addColorStop(0.5, 'rgba(193, 123, 92, 0.08)');
+
+                    // Pulsing gradient radius
+                    const radiusPulse = Math.sin(animTime * 1.5) * 100;
+                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500 + radiusPulse);
+
+                    // Pulsing opacity
+                    const opacityPulse = Math.sin(animTime * 1.2) * 0.05;
+                    gradient.addColorStop(0, `rgba(212, 165, 116, ${0.15 + opacityPulse})`);
+                    gradient.addColorStop(0.5, `rgba(193, 123, 92, ${0.08 + opacityPulse * 0.5})`);
                     gradient.addColorStop(1, 'rgba(184, 149, 106, 0)');
                     ctx.fillStyle = gradient;
                     ctx.fillRect(0, 0, w, h);
                     ctx.restore();
                 }
 
-                // Cool: Add cool tones overlay
+                // Cool: Add cool tones overlay with pulsing
                 if (features.selectedWords.includes('cool')) {
                     ctx.save();
-                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500);
-                    gradient.addColorStop(0, 'rgba(107, 124, 142, 0.12)');
-                    gradient.addColorStop(0.5, 'rgba(168, 181, 192, 0.06)');
+
+                    // Pulsing gradient radius
+                    const radiusPulse = Math.sin(animTime * 1.3) * 100;
+                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 500 + radiusPulse);
+
+                    // Pulsing opacity
+                    const opacityPulse = Math.sin(animTime * 1.4) * 0.04;
+                    gradient.addColorStop(0, `rgba(107, 124, 142, ${0.12 + opacityPulse})`);
+                    gradient.addColorStop(0.5, `rgba(168, 181, 192, ${0.06 + opacityPulse * 0.5})`);
                     gradient.addColorStop(1, 'rgba(90, 138, 175, 0)');
                     ctx.fillStyle = gradient;
                     ctx.fillRect(0, 0, w, h);
@@ -1318,6 +1439,8 @@
 
             closeModal() {
                 document.getElementById('generationModal').classList.remove('show');
+                this.isGenerating = false;
+                this.generationTime = 0;
             }
 
             download() {
@@ -1383,6 +1506,12 @@
 
                         this.ctx.restore();
                     }
+                }
+
+                // Render generated artwork if active
+                if (this.isGenerating && this.outputCtx && this.generatedFeatures) {
+                    this.generationTime += 0.016;
+                    this.generateGeometry(this.outputCtx, this.generatedFeatures, this.generationTime);
                 }
 
                 requestAnimationFrame(() => this.animate());
