@@ -185,6 +185,37 @@
         .restart-btn:hover {
             background: #ff3333;
         }
+
+        /* Escape Success screen */
+        #escape-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            color: #00ff00;
+            font-size: 48px;
+            text-shadow: 0 0 30px #00ff00;
+        }
+
+        #escape-screen.show {
+            display: flex;
+        }
+
+        #escape-text {
+            animation: fadeIn 2s ease-in;
+        }
+
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -201,6 +232,13 @@
         <div id="game-over-text">SYSTEM CORRUPTED</div>
         <div style="font-size: 24px; margin-top: 20px;">BUG OVERFLOW</div>
         <button class="restart-btn" onclick="location.reload()">RESTART</button>
+    </div>
+
+    <!-- Escape Success Screen -->
+    <div id="escape-screen">
+        <div id="escape-text">ESCAPED</div>
+        <div style="font-size: 24px; margin-top: 20px;">You found the EXIT</div>
+        <button class="restart-btn" style="background: #00ff00; color: #000;" onclick="location.reload()">PLAY AGAIN</button>
     </div>
 
     <!-- Crosshair -->
@@ -238,6 +276,7 @@
             hitCount: 0,
             maxHits: 10,
             isGameOver: false,
+            escaped: false,
             lastHitTime: 0,
             invulnerableTime: 1.0 // 1 second invulnerability after hit
         };
@@ -862,7 +901,13 @@
 
             // Keep player in corridor bounds (500m corridor)
             camera.position.x = Math.max(-2.5, Math.min(2.5, camera.position.x));
-            camera.position.z = Math.max(-245, Math.min(245, camera.position.z));
+            camera.position.z = Math.max(-252, Math.min(245, camera.position.z));
+
+            // Check if player reached exit door (escaped)
+            if (camera.position.z < -249) {
+                state.escaped = true;
+                showEscapeScreen();
+            }
         }
 
         // ===========================
@@ -1235,6 +1280,22 @@
             playGameOverSound();
         }
 
+        // Show escape success screen
+        function showEscapeScreen() {
+            if (state.isGameOver) return; // Don't override game over
+
+            console.log('🎉 ESCAPED - You found the EXIT!');
+
+            // Show escape success screen
+            document.getElementById('escape-screen').classList.add('show');
+
+            // Release pointer lock
+            document.exitPointerLock();
+
+            // Play success sound
+            playEscapeSound();
+        }
+
         // Play game over sound
         function playGameOverSound() {
             if (!state.audioContext) return;
@@ -1257,6 +1318,28 @@
             oscillator.stop(state.audioContext.currentTime + 1.5);
         }
 
+        // Play escape success sound
+        function playEscapeSound() {
+            if (!state.audioContext) return;
+
+            // Triumphant ascending tone
+            const oscillator = state.audioContext.createOscillator();
+            const gainNode = state.audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(200, state.audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(800, state.audioContext.currentTime + 0.8);
+
+            gainNode.gain.setValueAtTime(0.3, state.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + 0.8);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(state.audioContext.destination);
+
+            oscillator.start();
+            oscillator.stop(state.audioContext.currentTime + 0.8);
+        }
+
         // ===========================
         // ANIMATION LOOP
         // ===========================
@@ -1265,8 +1348,11 @@
 
             const delta = clock.getDelta();
 
-            updateMovement(delta);
-            updateMonsters(delta);
+            // Stop updates if game over or escaped
+            if (!state.isGameOver && !state.escaped) {
+                updateMovement(delta);
+                updateMonsters(delta);
+            }
 
             // Random flicker
             if (Math.random() > 0.995) {
