@@ -28,10 +28,67 @@
             letter-spacing: 8px;
             z-index: 1000;
         }
+        #wokeUpText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 96px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 30px rgba(255,255,255,0.9), 0 0 60px rgba(255,255,255,0.6);
+            opacity: 0;
+            pointer-events: none;
+            font-family: 'Arial Black', sans-serif;
+            letter-spacing: 12px;
+            z-index: 1000;
+            text-transform: uppercase;
+        }
+        #dreamText {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.8);
+            text-shadow: 0 0 40px rgba(255,255,255,0.9), 0 0 80px rgba(200,200,255,0.5);
+            opacity: 0;
+            pointer-events: none;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            letter-spacing: 20px;
+            z-index: 500;
+        }
+        #blackOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
+        #whiteOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
     </style>
 </head>
 <body>
     <div id="endText"></div>
+    <div id="wokeUpText">You woke up</div>
+    <div id="dreamText">DREAM</div>
+    <div id="blackOverlay"></div>
+    <div id="whiteOverlay"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         let scene, camera, renderer;
@@ -52,6 +109,19 @@
         let targetPlaneFOV = 60;
         let wasInPlaneMode = false;
         let whiteDoor;
+
+        // Door animation states
+        let whiteDoorTriggered = false;
+        let blackDoorTriggered = false;
+        let isAnimatingDoor = false;
+        let controlsLocked = false;
+        let whiteDoorEnterCount = 0;
+        let animationProgress = 0;
+        let currentDoorAnimation = null; // 'white' or 'black'
+
+        // Distortion objects
+        let eyes = [];
+        let skyDreamText = null;
 
         function init() {
             scene = new THREE.Scene();
@@ -574,6 +644,7 @@
         }
 
         function onMouseDown(e) {
+            if (controlsLocked) return;
             isMouseDown = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
@@ -584,20 +655,22 @@
         }
 
         function onMouseMove(e) {
+            if (controlsLocked) return;
             if (isMouseDown) {
                 const deltaX = e.clientX - lastMouseX;
                 const deltaY = e.clientY - lastMouseY;
-                
+
                 targetRotationY -= deltaX * 0.003;
                 targetRotationX -= deltaY * 0.003;
                 targetRotationX = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationX));
-                
+
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
             }
         }
 
         function onTouchStart(e) {
+            if (controlsLocked) return;
             if (e.touches.length === 1) {
                 lastMouseX = e.touches[0].clientX;
                 lastMouseY = e.touches[0].clientY;
@@ -605,14 +678,15 @@
         }
 
         function onTouchMove(e) {
+            if (controlsLocked) return;
             if (e.touches.length === 1) {
                 const deltaX = e.touches[0].clientX - lastMouseX;
                 const deltaY = e.touches[0].clientY - lastMouseY;
-                
+
                 targetRotationY -= deltaX * 0.003;
                 targetRotationX -= deltaY * 0.003;
                 targetRotationX = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationX));
-                
+
                 lastMouseX = e.touches[0].clientX;
                 lastMouseY = e.touches[0].clientY;
             }
@@ -622,16 +696,17 @@
         }
 
         function onMouseWheel(e) {
+            if (controlsLocked) return;
             e.preventDefault();
             const delta = e.deltaY * 0.002;
-            
+
             // 在平面模式下
             if (zoomLevel < 0.7) {
                 // 总是可以调整视野FOV（反转方向，保持和3D一致）
                 const fovDelta = -delta * 30; // 负号反转方向：向下滚=FOV减小=放大
                 targetPlaneFOV += fovDelta;
                 targetPlaneFOV = Math.max(0.1, Math.min(120, targetPlaneFOV)); // 最小0.1度，可以放得超级大
-                
+
                 // 只有在对准画面且尝试放大（delta > 0）时，才允许切换回3D
                 if (delta > 0 && canSwitchTo3D) {
                     targetZoom += delta;
@@ -726,6 +801,231 @@
         function updatePositionInfo(ratio) {
             // UI已隐藏，不需要更新
             return;
+        }
+
+        function checkDoorInView(door, threshold = 0.5) {
+            if (!door || !door.visible) return 0;
+
+            // 获取门的边界框
+            const box = new THREE.Box3().setFromObject(door);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+
+            // 获取门的8个角点
+            const corners = [
+                new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+            ];
+
+            // 将角点投影到屏幕空间
+            const screenCorners = corners.map(corner => {
+                const projected = corner.clone().project(camera);
+                return {
+                    x: (projected.x + 1) * window.innerWidth / 2,
+                    y: (-projected.y + 1) * window.innerHeight / 2,
+                    z: projected.z
+                };
+            });
+
+            // 检查是否在相机前方
+            const allInFront = screenCorners.every(corner => corner.z > -1 && corner.z < 1);
+            if (!allInFront) return 0;
+
+            // 计算屏幕边界框
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+
+            screenCorners.forEach(corner => {
+                minX = Math.min(minX, corner.x);
+                maxX = Math.max(maxX, corner.x);
+                minY = Math.min(minY, corner.y);
+                maxY = Math.max(maxY, corner.y);
+            });
+
+            // 限制在屏幕范围内
+            minX = Math.max(0, minX);
+            maxX = Math.min(window.innerWidth, maxX);
+            minY = Math.max(0, minY);
+            maxY = Math.min(window.innerHeight, maxY);
+
+            // 计算占据的屏幕面积比例
+            const doorScreenArea = (maxX - minX) * (maxY - minY);
+            const totalScreenArea = window.innerWidth * window.innerHeight;
+            return doorScreenArea / totalScreenArea;
+        }
+
+        function triggerWhiteDoorAnimation() {
+            if (whiteDoorTriggered || isAnimatingDoor) return;
+            whiteDoorTriggered = true;
+            isAnimatingDoor = true;
+            controlsLocked = true;
+            currentDoorAnimation = 'white';
+            animationProgress = 0;
+        }
+
+        function triggerBlackDoorAnimation() {
+            if (blackDoorTriggered || isAnimatingDoor) return;
+            blackDoorTriggered = true;
+            isAnimatingDoor = true;
+            controlsLocked = true;
+            currentDoorAnimation = 'black';
+            animationProgress = 0;
+        }
+
+        function updateDoorAnimation() {
+            if (!isAnimatingDoor) return;
+
+            animationProgress += 0.008; // 动画速度
+
+            if (currentDoorAnimation === 'white') {
+                const whiteOverlay = document.getElementById('whiteOverlay');
+
+                if (animationProgress < 1.0) {
+                    // 阶段1：白门放大并充满屏幕 (0-1)
+                    const scale = 1 + animationProgress * 50;
+                    whiteDoor.scale.set(scale, scale, scale);
+                    whiteOverlay.style.opacity = Math.min(1, animationProgress * 1.2);
+                } else if (animationProgress < 2.0) {
+                    // 阶段2：白光消散 (1-2)
+                    const fadeProgress = animationProgress - 1.0;
+                    whiteOverlay.style.opacity = 1 - fadeProgress;
+                } else {
+                    // 阶段3：返回3D世界
+                    whiteOverlay.style.opacity = 0;
+                    whiteDoor.scale.set(1, 1, 1);
+                    whiteDoor.visible = true;
+
+                    // 增加白门进入次数
+                    whiteDoorEnterCount++;
+
+                    // 应用世界扭曲
+                    applyWorldDistortion(whiteDoorEnterCount);
+
+                    // 重置动画状态
+                    isAnimatingDoor = false;
+                    controlsLocked = false;
+                    whiteDoorTriggered = false;
+                    currentDoorAnimation = null;
+                    animationProgress = 0;
+                }
+            } else if (currentDoorAnimation === 'black') {
+                const blackOverlay = document.getElementById('blackOverlay');
+                const wokeUpText = document.getElementById('wokeUpText');
+
+                if (animationProgress < 1.0) {
+                    // 阶段1：黑门放大并充满屏幕 (0-1)
+                    const scale = 1 + animationProgress * 20;
+                    dreamcoreDoor.scale.set(scale, scale, scale);
+                    blackOverlay.style.opacity = Math.min(1, animationProgress * 1.2);
+                } else if (animationProgress < 2.5) {
+                    // 阶段2：显示"You woke up"文字 (1-2.5)
+                    blackOverlay.style.opacity = 1;
+                    const textProgress = (animationProgress - 1.0) / 1.5;
+                    wokeUpText.style.opacity = Math.sin(textProgress * Math.PI); // 淡入淡出
+                } else {
+                    // 保持在黑屏状态
+                    blackOverlay.style.opacity = 1;
+                    wokeUpText.style.opacity = 1;
+                }
+            }
+        }
+
+        function applyWorldDistortion(level) {
+            if (level === 1) {
+                // 第一次：房子开始扭曲
+                house.rotation.z = Math.random() * 0.3 - 0.15;
+                house.scale.set(1, 1.2, 0.9);
+
+                // 添加一些眼睛
+                createEyes(3);
+            } else if (level === 2) {
+                // 第二次：更多扭曲 + 天空显示DREAM
+                house.rotation.z = Math.random() * 0.5 - 0.25;
+                house.scale.set(0.8, 1.4, 1.1);
+
+                // 添加更多眼睛
+                createEyes(5);
+
+                // 天空显示DREAM文字
+                showSkyDreamText();
+            } else if (level >= 3) {
+                // 第三次及以后：极度扭曲
+                house.rotation.z = Math.random() * 0.8 - 0.4;
+                house.rotation.x = Math.random() * 0.3 - 0.15;
+                house.scale.set(0.6 + Math.random() * 0.4, 1.2 + Math.random() * 0.6, 0.8 + Math.random() * 0.6);
+
+                // 扭曲其他房子
+                scene.children.forEach(child => {
+                    if (child.type === 'Group' && child !== house && child !== whiteDoor && child !== dreamcoreDoor) {
+                        child.rotation.set(
+                            Math.random() * 0.4 - 0.2,
+                            Math.random() * Math.PI * 2,
+                            Math.random() * 0.4 - 0.2
+                        );
+                    }
+                });
+
+                createEyes(8);
+            }
+        }
+
+        function createEyes(count) {
+            for (let i = 0; i < count; i++) {
+                const eye = new THREE.Group();
+
+                // 眼白
+                const whiteGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+                const whiteMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    emissive: 0xffffff,
+                    emissiveIntensity: 0.3
+                });
+                const white = new THREE.Mesh(whiteGeometry, whiteMaterial);
+                white.scale.set(1, 0.8, 0.5);
+                eye.add(white);
+
+                // 瞳孔
+                const pupilGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+                const pupilMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x000000,
+                    emissive: 0x330000,
+                    emissiveIntensity: 0.5
+                });
+                const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+                pupil.position.z = 0.3;
+                eye.add(pupil);
+
+                // 随机位置
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 5 + Math.random() * 15;
+                const height = Math.random() * 8 + 2;
+
+                eye.position.set(
+                    Math.sin(angle) * distance,
+                    height,
+                    Math.cos(angle) * distance
+                );
+
+                // 看向相机
+                eye.lookAt(camera.position);
+
+                eye.userData.blinkSpeed = Math.random() * 0.02 + 0.01;
+                eye.userData.blinkOffset = Math.random() * Math.PI * 2;
+
+                scene.add(eye);
+                eyes.push(eye);
+            }
+        }
+
+        function showSkyDreamText() {
+            const dreamText = document.getElementById('dreamText');
+            dreamText.style.opacity = 0.9;
         }
 
         function animate() {
@@ -927,6 +1227,38 @@
                     }
                 });
             }
+
+            // 眼睛眨眼动画
+            eyes.forEach(function(eye) {
+                eye.userData.blinkOffset += eye.userData.blinkSpeed;
+                const blinkScale = 0.8 + Math.sin(eye.userData.blinkOffset) * 0.2;
+                eye.children[0].scale.y = blinkScale * 0.8;
+
+                // 眼睛跟随相机
+                eye.lookAt(camera.position);
+            });
+
+            // 检测门占据视野比例
+            if (!isAnimatingDoor) {
+                // 在3D模式下检测白门
+                if (zoomLevel >= 0.7) {
+                    const whiteDoorRatio = checkDoorInView(whiteDoor);
+                    if (whiteDoorRatio >= 0.5) {
+                        triggerWhiteDoorAnimation();
+                    }
+                }
+
+                // 在平面模式下检测黑门
+                if (zoomLevel < 0.7) {
+                    const blackDoorRatio = checkDoorInView(dreamcoreDoor);
+                    if (blackDoorRatio >= 0.5) {
+                        triggerBlackDoorAnimation();
+                    }
+                }
+            }
+
+            // 更新门动画
+            updateDoorAnimation();
 
             renderer.render(scene, camera);
         }
