@@ -907,6 +907,18 @@
                     // 应用世界扭曲
                     applyWorldDistortion(whiteDoorEnterCount);
 
+                    // 重置相机视角到初始位置
+                    targetRotationY = 0;
+                    targetRotationX = 0;
+                    currentRotationY = 0;
+                    currentRotationX = 0;
+                    camera.position.set(0, 1.6, 0);
+                    camera.rotation.set(0, 0, 0);
+
+                    // 重置缩放
+                    zoomLevel = 1.0;
+                    targetZoom = 1.0;
+
                     // 重置动画状态
                     isAnimatingDoor = false;
                     controlsLocked = false;
