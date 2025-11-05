@@ -1240,15 +1240,15 @@
 
             // 检测门占据视野比例
             if (!isAnimatingDoor) {
-                // 在3D模式下检测白门
+                // 在3D模式下检测白门（需要80%视野）
                 if (zoomLevel >= 0.7) {
                     const whiteDoorRatio = checkDoorInView(whiteDoor);
-                    if (whiteDoorRatio >= 0.5) {
+                    if (whiteDoorRatio >= 0.8) {
                         triggerWhiteDoorAnimation();
                     }
                 }
 
-                // 在平面模式下检测黑门
+                // 在平面模式下检测黑门（需要50%视野）
                 if (zoomLevel < 0.7) {
                     const blackDoorRatio = checkDoorInView(dreamcoreDoor);
                     if (blackDoorRatio >= 0.5) {
