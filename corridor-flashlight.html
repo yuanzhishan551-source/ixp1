@@ -84,44 +84,6 @@
             transform: translateY(-50%);
         }
 
-        /* Click to start overlay */
-        #start-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: #00ff00;
-            font-size: 24px;
-            z-index: 200;
-            cursor: pointer;
-            text-shadow: 0 0 20px #00ff00;
-        }
-
-        #start-overlay.hidden {
-            display: none;
-        }
-
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.05); }
-        }
-
-        /* Loading indicator */
-        .loading {
-            font-size: 14px;
-            margin-top: 20px;
-            opacity: 0.7;
-        }
 
         /* BUG Invasion overlay - random scattered bugs */
         #bug-invasion {
@@ -239,15 +201,6 @@
         <div id="game-over-text">SYSTEM CORRUPTED</div>
         <div style="font-size: 24px; margin-top: 20px;">BUG OVERFLOW</div>
         <button class="restart-btn" onclick="location.reload()">RESTART</button>
-    </div>
-
-    <!-- Start Overlay -->
-    <div id="start-overlay">
-        <div class="pulse">▶ CLICK TO ENTER ◀</div>
-        <div class="loading">Loading 3D Environment...</div>
-        <div style="font-size: 12px; margin-top: 20px; opacity: 0.6;">
-            WASD: Move | Mouse: Look | Click: Switch Mode
-        </div>
     </div>
 
     <!-- Crosshair -->
@@ -826,12 +779,12 @@
                 }
             });
 
-            // Mouse look
-            let startOverlay = document.getElementById('start-overlay');
-            startOverlay.addEventListener('click', () => {
-                startOverlay.classList.add('hidden');
-                renderer.domElement.requestPointerLock();
-            });
+            // Mouse look - request pointer lock on first click
+            renderer.domElement.addEventListener('click', () => {
+                if (!state.isLocked) {
+                    renderer.domElement.requestPointerLock();
+                }
+            }, { once: true });
 
             document.addEventListener('pointerlockchange', () => {
                 state.isLocked = document.pointerLockElement === renderer.domElement;
