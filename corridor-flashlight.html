@@ -471,6 +471,9 @@
             // Add floor cracks
             createFloorCracks(floor, corridorWidth, corridorLength);
 
+            // Add exit door at corridor end
+            createExitDoor(corridor, corridorLength, corridorWidth, corridorHeight);
+
             scene.add(corridor);
         }
 
@@ -619,6 +622,92 @@
                 crack.rotation.y = Math.random() * Math.PI;
                 scene.add(crack);
             }
+        }
+
+        // ===========================
+        // CREATE EXIT DOOR
+        // ===========================
+        function createExitDoor(parent, length, width, height) {
+            const doorGroup = new THREE.Group();
+
+            // Door position at the end of corridor
+            const doorZ = -length / 2 + 0.5; // Slight offset from wall
+
+            // Door frame (black)
+            const doorGeometry = new THREE.BoxGeometry(2, 3, 0.2);
+            const doorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0a0a0a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const door = new THREE.Mesh(doorGeometry, doorMaterial);
+            door.position.set(0, 1.5, doorZ);
+            door.receiveShadow = true;
+            door.castShadow = true;
+            doorGroup.add(door);
+
+            // Door handle (darker gray)
+            const handleGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.1);
+            const handleMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.5,
+                metalness: 0.5
+            });
+            const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+            handle.position.set(0.7, 1.5, doorZ + 0.15);
+            doorGroup.add(handle);
+
+            // EXIT sign (green glowing)
+            const signCanvas = document.createElement('canvas');
+            signCanvas.width = 256;
+            signCanvas.height = 128;
+            const ctx = signCanvas.getContext('2d');
+
+            // Green background
+            ctx.fillStyle = '#00aa00';
+            ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
+
+            // White border
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(5, 5, signCanvas.width - 10, signCanvas.height - 10);
+
+            // EXIT text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 72px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('EXIT', signCanvas.width / 2, signCanvas.height / 2);
+
+            // Running man icon (simple representation)
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(60, 64, 12, 0, Math.PI * 2); // Head
+            ctx.fill();
+            ctx.fillRect(55, 76, 10, 20); // Body
+            ctx.fillRect(50, 80, 5, 15); // Left leg
+            ctx.fillRect(65, 80, 5, 15); // Right leg
+
+            const signTexture = new THREE.CanvasTexture(signCanvas);
+            signTexture.magFilter = THREE.NearestFilter;
+            signTexture.minFilter = THREE.NearestFilter;
+
+            const signGeometry = new THREE.PlaneGeometry(1.5, 0.75);
+            const signMaterial = new THREE.MeshStandardMaterial({
+                map: signTexture,
+                emissive: 0x00ff00,
+                emissiveIntensity: 0.5
+            });
+            const sign = new THREE.Mesh(signGeometry, signMaterial);
+            sign.position.set(0, 3.3, doorZ + 0.1);
+            doorGroup.add(sign);
+
+            // Green light from sign
+            const signLight = new THREE.PointLight(0x00ff00, 0.5, 5);
+            signLight.position.set(0, 3.3, doorZ + 0.5);
+            doorGroup.add(signLight);
+
+            parent.add(doorGroup);
         }
 
         // ===========================
