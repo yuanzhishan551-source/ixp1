@@ -5,14 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>梦核世界</title>
     <style>
+        /* ===========================================
+           CSS 样式部分
+           定义页面布局和覆盖层样式
+           =========================================== */
+
         body {
             margin: 0;
-            overflow: hidden;
+            overflow: hidden; /* 隐藏滚动条，创建全屏体验 */
             font-family: Arial, sans-serif;
         }
+
         canvas {
-            display: block;
+            display: block; /* 移除canvas下方的空隙 */
         }
+
+        /* 预留的结束文字样式（当前未使用） */
         #endText {
             position: absolute;
             top: 50%;
@@ -22,32 +30,38 @@
             font-weight: bold;
             color: white;
             text-shadow: 0 0 20px rgba(255,255,255,0.8);
-            opacity: 0;
-            pointer-events: none;
+            opacity: 0; /* 默认隐藏 */
+            pointer-events: none; /* 不阻挡鼠标事件 */
             font-family: 'Courier New', monospace;
             letter-spacing: 8px;
             z-index: 1000;
         }
+
+        /* 黑门结局文字 "You woke up" */
         #wokeUpText {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 64px;
+            font-size: 64px; /* 调小以适应一行 */
             font-weight: bold;
             color: white;
-            text-shadow: 0 0 30px rgba(255,255,255,0.9), 0 0 60px rgba(255,255,255,0.6);
-            opacity: 0;
+            text-shadow: 0 0 30px rgba(255,255,255,0.9), 0 0 60px rgba(255,255,255,0.6); /* 双层发光 */
+            opacity: 0; /* 默认隐藏 */
             pointer-events: none;
-            font-family: 'Arial Black', sans-serif;
+            font-family: 'Arial Black', sans-serif; /* 梦核风格字体 */
             letter-spacing: 8px;
-            z-index: 1000;
-            text-transform: uppercase;
-            white-space: nowrap;
+            z-index: 1000; /* 在覆盖层之上 */
+            text-transform: uppercase; /* 大写 */
+            white-space: nowrap; /* 防止换行 */
         }
+
+        /* DREAM文字（已废弃，现为3D对象） */
         #dreamText {
-            display: none;
+            display: none; /* 隐藏，不再使用2D版本 */
         }
+
+        /* 黑色全屏覆盖层 - 用于黑门动画 */
         #blackOverlay {
             position: fixed;
             top: 0;
@@ -55,10 +69,12 @@
             width: 100%;
             height: 100%;
             background-color: black;
-            opacity: 0;
-            pointer-events: none;
-            z-index: 999;
+            opacity: 0; /* 默认透明 */
+            pointer-events: none; /* 不阻挡交互 */
+            z-index: 999; /* 在文字下方 */
         }
+
+        /* 白色全屏覆盖层 - 用于白门动画 */
         #whiteOverlay {
             position: fixed;
             top: 0;
@@ -66,79 +82,107 @@
             width: 100%;
             height: 100%;
             background-color: white;
-            opacity: 0;
+            opacity: 0; /* 默认透明 */
             pointer-events: none;
             z-index: 999;
         }
     </style>
 </head>
 <body>
+    <!-- HTML 覆盖层元素 -->
     <div id="endText"></div>
     <div id="wokeUpText">You woke up</div>
     <div id="dreamText">DREAM</div>
     <div id="blackOverlay"></div>
     <div id="whiteOverlay"></div>
+
+    <!-- 引入 Three.js 库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <script>
+        /* ===========================================
+           全局变量声明部分
+           =========================================== */
+
+        // Three.js 核心对象
         let scene, camera, renderer;
-        let house, ground, sky;
-        let targetRotationY = 0, targetRotationX = 0;
-        let currentRotationY = 0, currentRotationX = 0;
-        let isMouseDown = false;
-        let lastMouseX = 0, lastMouseY = 0;
-        let zoomLevel = 1.0;
-        let targetZoom = 1.0;
-        let worldPlane;
-        let renderTarget, renderCamera;
-        let isRenderTargetReady = false;
-        let galleryLight;
-        let dreamcoreDoor;
-        let canSwitchTo3D = false;
-        let planeFOV = 60; // 平面模式下独立的FOV控制
-        let targetPlaneFOV = 60;
-        let wasInPlaneMode = false;
-        let whiteDoor;
 
-        // Door animation states
-        let whiteDoorTriggered = false;
-        let blackDoorTriggered = false;
-        let isAnimatingDoor = false;
-        let controlsLocked = false;
-        let whiteDoorEnterCount = 0;
-        let animationProgress = 0;
-        let currentDoorAnimation = null; // 'white' or 'black'
+        // 3D场景元素
+        let house, ground, sky;  // 房子、地面、天空
 
-        // Distortion objects
-        let eyes = [];
-        let skyDreamText = null;
+        // 相机旋转控制变量
+        let targetRotationY = 0, targetRotationX = 0;  // 目标旋转角度
+        let currentRotationY = 0, currentRotationX = 0;  // 当前旋转角度（平滑插值用）
 
+        // 鼠标/触摸交互状态
+        let isMouseDown = false;  // 鼠标是否按下
+        let lastMouseX = 0, lastMouseY = 0;  // 上一帧鼠标位置
+
+        // 缩放控制变量
+        let zoomLevel = 1.0;  // 当前缩放级别
+        let targetZoom = 1.0;  // 目标缩放级别
+
+        // 画廊模式相关变量
+        let worldPlane;  // 显示3D世界的平面
+        let renderTarget, renderCamera;  // 渲染目标和渲染用相机
+        let isRenderTargetReady = false;  // 渲染目标是否准备好
+        let galleryLight;  // 画廊专用光源
+        let dreamcoreDoor;  // 黑色梦核门
+        let canSwitchTo3D = false;  // 是否可以从画廊切换回3D
+        let planeFOV = 60;  // 平面模式下的FOV
+        let targetPlaneFOV = 60;  // 平面模式下的目标FOV
+        let wasInPlaneMode = false;  // 是否曾在平面模式
+        let whiteDoor;  // 白色门
+
+        // 门动画状态变量
+        let whiteDoorTriggered = false;  // 白门是否已触发
+        let blackDoorTriggered = false;  // 黑门是否已触发
+        let isAnimatingDoor = false;  // 是否正在播放门动画
+        let controlsLocked = false;  // 控制是否锁定
+        let whiteDoorEnterCount = 0;  // 白门进入次数（决定扭曲等级）
+        let animationProgress = 0;  // 动画进度
+        let currentDoorAnimation = null;  // 当前动画类型：'white' 或 'black'
+
+        // 世界扭曲相关对象
+        let eyes = [];  // 眼睛数组
+        let skyDreamText = null;  // 天空中的DREAM文字
+
+        /* ===========================================
+           初始化函数
+           创建场景、相机、渲染器，添加所有元素
+           =========================================== */
         function init() {
+            // 创建场景
             scene = new THREE.Scene();
-            scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
+            scene.fog = new THREE.Fog(0x87ceeb, 40, 120);  // 添加蓝色雾效
 
+            // 创建相机（透视相机）
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 0);
+            camera.position.set(0, 1.6, 0);  // 设置在人眼高度
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            // 创建渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });  // 开启抗锯齿
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.setClearColor(0x87ceeb, 1);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制像素比，避免过高分辨率
-            document.body.appendChild(renderer.domElement);
+            renderer.shadowMap.enabled = true;  // 启用阴影
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // 柔和阴影
+            renderer.setClearColor(0x87ceeb, 1);  // 天蓝色背景
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));  // 限制像素比，提升性能
+            document.body.appendChild(renderer.domElement);  // 添加到页面
 
-            createSky();
-            createGround();
-            createHouse();
-            createWhiteDoor();
-            createDreamcoreObjects();
-            createClouds();
-            addLights();
-            createRenderTarget();
-            createWorldPlane();
-            createGalleryRoom();
-            createDreamcoreDoor();
+            // 依次创建所有场景元素
+            createSky();  // 天空
+            createGround();  // 地面
+            createHouse();  // 房子
+            createWhiteDoor();  // 白门
+            createDreamcoreObjects();  // 梦核装饰物
+            createClouds();  // 云朵
+            addLights();  // 光源
+            createRenderTarget();  // 渲染目标
+            createWorldPlane();  // 世界平面
+            createGalleryRoom();  // 画廊房间
+            createDreamcoreDoor();  // 黑门
 
+            // 添加事件监听器
             document.addEventListener('mousedown', onMouseDown);
             document.addEventListener('mouseup', onMouseUp);
             document.addEventListener('mousemove', onMouseMove);
@@ -148,11 +192,22 @@
             document.addEventListener('wheel', onMouseWheel, { passive: false });
             window.addEventListener('resize', onWindowResize);
 
+            // 开始动画循环
             animate();
         }
 
+        /* ===========================================
+           场景创建函数
+           =========================================== */
+
+        /**
+         * 创建天空
+         * 使用自定义Shader创建渐变天空球体
+         */
         function createSky() {
-            const skyGeometry = new THREE.SphereGeometry(500, 64, 64);
+            const skyGeometry = new THREE.SphereGeometry(500, 64, 64);  // 大球体包裹场景
+
+            // 顶点着色器：传递世界坐标
             const vertexShader = `
                 varying vec3 vWorldPosition;
                 void main() {
@@ -161,43 +216,48 @@
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `;
-            
+
+            // 片段着色器：根据高度混合颜色
             const fragmentShader = `
                 varying vec3 vWorldPosition;
                 void main() {
-                    float h = normalize(vWorldPosition).y;
-                    vec3 topColor = vec3(0.29, 0.48, 0.65);
-                    vec3 bottomColor = vec3(0.53, 0.81, 0.92);
-                    vec3 color = mix(bottomColor, topColor, smoothstep(-0.1, 0.3, h));
+                    float h = normalize(vWorldPosition).y;  // 归一化的高度
+                    vec3 topColor = vec3(0.29, 0.48, 0.65);  // 顶部深蓝
+                    vec3 bottomColor = vec3(0.53, 0.81, 0.92);  // 底部浅蓝
+                    vec3 color = mix(bottomColor, topColor, smoothstep(-0.1, 0.3, h));  // 平滑过渡
                     gl_FragColor = vec4(color, 1.0);
                 }
             `;
-            
+
             const skyMaterial = new THREE.ShaderMaterial({
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
-                side: THREE.BackSide
+                side: THREE.BackSide  // 从内部看
             });
-            
+
             sky = new THREE.Mesh(skyGeometry, skyMaterial);
             scene.add(sky);
         }
 
+        /**
+         * 创建地面
+         * 尝试加载草地纹理，失败则使用程序化纹理
+         */
         function createGround() {
             const groundGeometry = new THREE.PlaneGeometry(200, 200, 1, 1);
-            
+
             const textureLoader = new THREE.TextureLoader();
             const grassTexture = textureLoader.load(
                 'https://files.catbox.moe/dn8s3c.jpg',
                 function(texture) {
-                    // 加载成功
-                    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.repeat.set(20, 20);
+                    // 纹理加载成功回调
+                    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();  // 最大各向异性过滤
+                    texture.wrapS = THREE.RepeatWrapping;  // S方向重复
+                    texture.wrapT = THREE.RepeatWrapping;  // T方向重复
+                    texture.repeat.set(20, 20);  // 重复20x20次
                     texture.minFilter = THREE.LinearMipMapLinearFilter;
                     texture.magFilter = THREE.LinearFilter;
-                    
+
                     if (ground && ground.material) {
                         ground.material.map = texture;
                         ground.material.needsUpdate = true;
@@ -205,45 +265,52 @@
                 },
                 undefined,
                 function(err) {
-                    // 加载失败，静默使用程序化纹理
+                    // 加载失败，使用程序化纹理
                     createProceduralGroundTexture();
                 }
             );
-            
+
             // 初始使用简单材质
-            const groundMaterial = new THREE.MeshLambertMaterial({ 
-                color: 0xc4a574,
+            const groundMaterial = new THREE.MeshLambertMaterial({
+                color: 0xc4a574,  // 土黄色
                 side: THREE.DoubleSide
             });
-            
+
             ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
+            ground.rotation.x = -Math.PI / 2;  // 旋转为水平
             ground.position.y = 0;
-            ground.receiveShadow = true;
+            ground.receiveShadow = true;  // 接收阴影
             scene.add(ground);
         }
-        
+
+        /**
+         * 创建程序化地面纹理
+         * 使用Canvas绘制噪声和颗粒效果
+         */
         function createProceduralGroundTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 512;
             canvas.height = 512;
             const context = canvas.getContext('2d');
-            
+
+            // 填充基础颜色
             context.fillStyle = '#c4a574';
             context.fillRect(0, 0, 512, 512);
-            
+
+            // 添加像素噪声
             const imageData = context.getImageData(0, 0, 512, 512);
             const data = imageData.data;
-            
+
             for (let i = 0; i < data.length; i += 4) {
                 const noise = (Math.random() - 0.5) * 40;
-                data[i] = Math.min(255, Math.max(0, 196 + noise));
-                data[i + 1] = Math.min(255, Math.max(0, 165 + noise));
-                data[i + 2] = Math.min(255, Math.max(0, 116 + noise));
+                data[i] = Math.min(255, Math.max(0, 196 + noise));      // R
+                data[i + 1] = Math.min(255, Math.max(0, 165 + noise));  // G
+                data[i + 2] = Math.min(255, Math.max(0, 116 + noise));  // B
             }
-            
+
             context.putImageData(imageData, 0, 0);
-            
+
+            // 添加深色斑点
             for (let i = 0; i < 500; i++) {
                 const x = Math.random() * 512;
                 const y = Math.random() * 512;
@@ -253,7 +320,8 @@
                 context.arc(x, y, size, 0, Math.PI * 2);
                 context.fill();
             }
-            
+
+            // 添加浅色斑点
             for (let i = 0; i < 300; i++) {
                 const x = Math.random() * 512;
                 const y = Math.random() * 512;
@@ -263,100 +331,117 @@
                 context.arc(x, y, size, 0, Math.PI * 2);
                 context.fill();
             }
-            
+
+            // 创建纹理并应用
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(20, 20);
-            
+
             if (ground && ground.material) {
                 ground.material.map = texture;
                 ground.material.needsUpdate = true;
             }
         }
 
+        /**
+         * 创建房子
+         * 由主体、屋顶、窗户、门、装饰球组成
+         */
         function createHouse() {
-            house = new THREE.Group();
+            house = new THREE.Group();  // 创建组以便整体操作
 
+            // 房子主体
             const bodyGeometry = new THREE.BoxGeometry(3, 3, 2.5);
-            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xe8e8d0 });
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xe8e8d0 });  // 米白色
             const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.position.y = 1.5;
-            body.castShadow = true;
-            body.receiveShadow = true;
+            body.position.y = 1.5;  // 抬高，底部在地面上
+            body.castShadow = true;  // 投射阴影
+            body.receiveShadow = true;  // 接收阴影
             house.add(body);
 
+            // 屋顶（四边锥形）
             const roofGeometry = new THREE.ConeGeometry(2.3, 1.8, 4);
-            const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xc84444 });
+            const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xc84444 });  // 砖红色
             const roof = new THREE.Mesh(roofGeometry, roofMaterial);
-            roof.position.y = 3.9;
-            roof.rotation.y = Math.PI / 4;
+            roof.position.y = 3.9;  // 放在主体上方
+            roof.rotation.y = Math.PI / 4;  // 旋转45度，使边缘对齐墙角
             roof.castShadow = true;
             house.add(roof);
 
+            // 窗户材质
             const windowGeometry = new THREE.BoxGeometry(0.6, 0.7, 0.1);
-            const windowMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
-            
+            const windowMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });  // 深灰色
+
+            // 左窗户
             const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
-            window1.position.set(-0.7, 1.8, 1.26);
+            window1.position.set(-0.7, 1.8, 1.26);  // 前墙左侧
             house.add(window1);
 
+            // 右窗户
             const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
-            window2.position.set(0.7, 1.8, 1.26);
+            window2.position.set(0.7, 1.8, 1.26);  // 前墙右侧
             house.add(window2);
 
+            // 上窗户
             const window3 = new THREE.Mesh(windowGeometry, windowMaterial);
-            window3.position.set(0, 2.5, 1.26);
+            window3.position.set(0, 2.5, 1.26);  // 前墙上方
             house.add(window3);
 
+            // 门
             const doorGeometry = new THREE.BoxGeometry(0.7, 1.2, 0.1);
-            const doorMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const doorMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });  // 棕色
             const door = new THREE.Mesh(doorGeometry, doorMaterial);
-            door.position.set(0, 0.6, 1.26);
+            door.position.set(0, 0.6, 1.26);  // 前墙中央底部
             house.add(door);
 
+            // 白色装饰球（梦核风格）
             const whiteObjGeometry = new THREE.SphereGeometry(0.3, 8, 8);
             const whiteObjMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
             const whiteObj = new THREE.Mesh(whiteObjGeometry, whiteObjMaterial);
-            whiteObj.position.set(-2, 0.3, 2);
-            whiteObj.scale.set(1, 0.5, 1.5);
+            whiteObj.position.set(-2, 0.3, 2);  // 房子左前方
+            whiteObj.scale.set(1, 0.5, 1.5);  // 拉伸变形
             whiteObj.castShadow = true;
             house.add(whiteObj);
 
-            house.position.set(0, 0, -10);
+            house.position.set(0, 0, -10);  // 整体位置：相机前方10单位
             scene.add(house);
         }
 
+        /**
+         * 创建白门
+         * 漂浮在房子上方的发光白色门
+         */
         function createWhiteDoor() {
             whiteDoor = new THREE.Group();
-            
-            // 白色门框 - 放大到两倍
+
+            // 门框 - 发光白色
             const doorFrameGeometry = new THREE.BoxGeometry(3, 4.5, 0.2);
-            const doorFrameMaterial = new THREE.MeshStandardMaterial({ 
+            const doorFrameMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
                 roughness: 0.3,
                 metalness: 0.2,
-                emissive: 0xffffff,
-                emissiveIntensity: 0.8 // 发出白光
+                emissive: 0xffffff,  // 自发光
+                emissiveIntensity: 0.8  // 发光强度
             });
             const doorFrame = new THREE.Mesh(doorFrameGeometry, doorFrameMaterial);
             doorFrame.position.set(0, 0, 0);
             doorFrame.castShadow = true;
             whiteDoor.add(doorFrame);
-            
-            // 门内部 - 更亮的白色
+
+            // 门内部 - 纯白平面
             const doorInsideGeometry = new THREE.PlaneGeometry(2.5, 4);
-            const doorInsideMaterial = new THREE.MeshBasicMaterial({ 
+            const doorInsideMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 side: THREE.DoubleSide
             });
             const doorInside = new THREE.Mesh(doorInsideGeometry, doorInsideMaterial);
             doorInside.position.set(0, 0, 0.1);
             whiteDoor.add(doorInside);
-            
-            // 添加白色光晕 - 梦核风格
+
+            // 第一层光晕
             const glowGeometry = new THREE.PlaneGeometry(3.5, 5);
-            const glowMaterial = new THREE.MeshBasicMaterial({ 
+            const glowMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
                 opacity: 0.4,
@@ -365,10 +450,10 @@
             const glow = new THREE.Mesh(glowGeometry, glowMaterial);
             glow.position.set(0, 0, -0.2);
             whiteDoor.add(glow);
-            
-            // 添加第二层更大的白色光晕
+
+            // 第二层光晕（更大更淡）
             const glow2Geometry = new THREE.PlaneGeometry(4.5, 6);
-            const glow2Material = new THREE.MeshBasicMaterial({ 
+            const glow2Material = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
                 opacity: 0.2,
@@ -377,11 +462,11 @@
             const glow2 = new THREE.Mesh(glow2Geometry, glow2Material);
             glow2.position.set(0, 0, -0.4);
             whiteDoor.add(glow2);
-            
-            // 添加一些梦核风格的黑色小球体装饰（与白门对比）
+
+            // 添加黑色小球装饰（梦核对比）
             for (let i = 0; i < 2; i++) {
                 const sphereGeometry = new THREE.SphereGeometry(0.08, 8, 8);
-                const sphereMaterial = new THREE.MeshStandardMaterial({ 
+                const sphereMaterial = new THREE.MeshStandardMaterial({
                     color: 0x000000,
                     emissive: 0x000000,
                     emissiveIntensity: 0.5,
@@ -394,37 +479,46 @@
                     (Math.random() - 0.5) * 3.5,
                     0.24 + Math.random() * 0.24
                 );
+                // 设置浮动动画参数
                 sphere.userData.floatSpeed = Math.random() * 0.02 + 0.01;
                 sphere.userData.floatOffset = Math.random() * Math.PI * 2;
                 whiteDoor.add(sphere);
             }
-            
+
             // 放置在房子上空
-            whiteDoor.position.set(0, 8, -10); // 在房子正上方
-            whiteDoor.rotation.x = Math.PI / 6; // 稍微向下倾斜
+            whiteDoor.position.set(0, 8, -10);
+            whiteDoor.rotation.x = Math.PI / 6;  // 向下倾斜30度
             scene.add(whiteDoor);
         }
 
+        /**
+         * 创建梦核装饰物
+         * 额外的房子和白色小球
+         */
         function createDreamcoreObjects() {
+            // 克隆第二个房子
             const house2 = house.clone();
-            house2.position.set(15, 0, -25);
-            house2.scale.set(0.8, 0.8, 0.8);
+            house2.position.set(15, 0, -25);  // 右后方
+            house2.scale.set(0.8, 0.8, 0.8);  // 稍小
             scene.add(house2);
 
+            // 克隆第三个房子
             const house3 = house.clone();
-            house3.position.set(-20, 0, -30);
+            house3.position.set(-20, 0, -30);  // 左后方
             house3.scale.set(0.9, 0.9, 0.9);
             scene.add(house3);
 
+            // 创建5个白色小球，环绕分布
             for (let i = 0; i < 5; i++) {
                 const objGeometry = new THREE.SphereGeometry(0.5, 8, 8);
-                const objMaterial = new THREE.MeshLambertMaterial({ 
+                const objMaterial = new THREE.MeshLambertMaterial({
                     color: 0xffffff,
                     transparent: true,
                     opacity: 0.9
                 });
                 const obj = new THREE.Mesh(objGeometry, objMaterial);
-                
+
+                // 圆周分布
                 const angle = (i / 5) * Math.PI * 2;
                 const distance = 8 + Math.random() * 10;
                 obj.position.set(
@@ -432,49 +526,65 @@
                     Math.random() * 0.5,
                     Math.cos(angle) * distance
                 );
-                obj.scale.set(1, 0.4, 1.2);
+                obj.scale.set(1, 0.4, 1.2);  // 拉伸变形
                 obj.castShadow = true;
                 scene.add(obj);
             }
         }
 
+        /**
+         * 创建云朵
+         * 8组云朵，每组3个球体，循环移动
+         */
         function createClouds() {
             for (let i = 0; i < 8; i++) {
                 const cloud = new THREE.Group();
-                
+
+                // 每朵云由3个球体组成
                 for (let j = 0; j < 3; j++) {
                     const geometry = new THREE.SphereGeometry(Math.random() * 0.8 + 0.5, 8, 8);
-                    const material = new THREE.MeshLambertMaterial({ 
+                    const material = new THREE.MeshLambertMaterial({
                         color: 0xffffff,
                         transparent: true,
                         opacity: 0.85
                     });
                     const sphere = new THREE.Mesh(geometry, material);
-                    sphere.position.x = (Math.random() - 0.5) * 2;
+                    sphere.position.x = (Math.random() - 0.5) * 2;  // 随机偏移
                     sphere.position.y = (Math.random() - 0.5) * 0.5;
                     cloud.add(sphere);
                 }
 
+                // 圆周分布位置
                 const angle = (i / 8) * Math.PI * 2;
                 const distance = 30 + Math.random() * 20;
                 cloud.position.set(
                     Math.sin(angle) * distance,
-                    Math.random() * 8 + 12,
+                    Math.random() * 8 + 12,  // 高度12-20
                     Math.cos(angle) * distance
                 );
+
+                // 设置循环移动参数
                 cloud.userData.speed = Math.random() * 0.002 + 0.001;
                 cloud.userData.angle = angle;
                 scene.add(cloud);
             }
         }
 
+        /**
+         * 添加光源
+         * 环境光 + 定向光（带阴影）
+         */
         function addLights() {
+            // 环境光 - 提供基础照明
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);
 
+            // 定向光 - 模拟太阳光，产生阴影
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(10, 20, 10);
             directionalLight.castShadow = true;
+
+            // 阴影相机设置
             directionalLight.shadow.mapSize.width = 2048;
             directionalLight.shadow.mapSize.height = 2048;
             directionalLight.shadow.camera.near = 0.5;
@@ -486,37 +596,51 @@
             scene.add(directionalLight);
         }
 
+        /**
+         * 创建渲染目标
+         * 用于将3D世界渲染到纹理
+         */
         function createRenderTarget() {
+            // 创建渲染目标（纹理）
             renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
-            
+
+            // 创建渲染用相机（与主相机参数相同）
             renderCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             renderCamera.position.set(0, 1.6, 0);
         }
 
+        /**
+         * 创建世界平面
+         * 在画廊模式中显示3D世界的平面
+         */
         function createWorldPlane() {
             const planeGeometry = new THREE.PlaneGeometry(300, 200);
-            const planeMaterial = new THREE.MeshStandardMaterial({ 
-                map: renderTarget.texture,
+            const planeMaterial = new THREE.MeshStandardMaterial({
+                map: renderTarget.texture,  // 使用渲染目标纹理
                 side: THREE.DoubleSide,
                 roughness: 0.5,
                 metalness: 0.0,
-                fog: false // 平面也不受雾影响
+                fog: false  // 不受雾影响
             });
             worldPlane = new THREE.Mesh(planeGeometry, planeMaterial);
-            worldPlane.position.set(0, 0, -150); // 平面位置：向前（负数）= 离相机更远
+            worldPlane.position.set(0, 0, -150);  // 放在相机前方较远处
             worldPlane.castShadow = true;
             worldPlane.receiveShadow = true;
-            worldPlane.visible = false;
+            worldPlane.visible = false;  // 默认隐藏
             scene.add(worldPlane);
         }
 
+        /**
+         * 创建画廊房间
+         * 只创建光源和阴影接收平面（无墙壁）
+         */
         function createGalleryRoom() {
-            // 不需要墙壁和地板，只需要光源产生投影
-            
-            // 画廊专用光源 - 从稍微偏左的正面上方照射
+            // 画廊定向光 - 从前上方照射
             galleryLight = new THREE.DirectionalLight(0xffffff, 1.2);
-            galleryLight.position.set(-30, 150, 100); // 稍微偏左的正面上方
+            galleryLight.position.set(-30, 150, 100);  // 稍微偏左的正面上方
             galleryLight.castShadow = true;
+
+            // 阴影设置
             galleryLight.shadow.mapSize.width = 2048;
             galleryLight.shadow.mapSize.height = 2048;
             galleryLight.shadow.camera.near = 0.5;
@@ -525,74 +649,78 @@
             galleryLight.shadow.camera.right = 200;
             galleryLight.shadow.camera.top = 200;
             galleryLight.shadow.camera.bottom = -200;
-            galleryLight.shadow.radius = 4;
-            galleryLight.visible = false;
+            galleryLight.shadow.radius = 4;  // 柔和阴影
+            galleryLight.visible = false;  // 默认隐藏
             scene.add(galleryLight);
-            
-            // 添加环境光
+
+            // 画廊环境光
             const galleryAmbient = new THREE.AmbientLight(0xffffff, 0.8);
             galleryAmbient.visible = false;
             galleryAmbient.name = 'galleryAmbient';
             scene.add(galleryAmbient);
-            
-            // 创建接收投影的平面（在画的前面，作为地面）
+
+            // 阴影接收平面（作为地面）
             const shadowPlaneGeometry = new THREE.PlaneGeometry(500, 500);
-            const shadowPlaneMaterial = new THREE.ShadowMaterial({ 
+            const shadowPlaneMaterial = new THREE.ShadowMaterial({  // 只显示阴影的材质
                 opacity: 0.12
             });
             const shadowPlane = new THREE.Mesh(shadowPlaneGeometry, shadowPlaneMaterial);
-            shadowPlane.rotation.x = -Math.PI / 2;
-            shadowPlane.position.set(0, -100, 20);
+            shadowPlane.rotation.x = -Math.PI / 2;  // 水平放置
+            shadowPlane.position.set(0, -100, 20);  // 在平面前方
             shadowPlane.receiveShadow = true;
             shadowPlane.visible = false;
             shadowPlane.name = 'shadowPlane';
             scene.add(shadowPlane);
         }
 
+        /**
+         * 创建梦核黑门
+         * 在画廊模式中可见的巨大黑色门
+         */
         function createDreamcoreDoor() {
             dreamcoreDoor = new THREE.Group();
-            
-            // 黑色门框 - 发出暗光
+
+            // 黑色门框 - 发出"暗光"
             const doorFrameGeometry = new THREE.BoxGeometry(120, 180, 8);
-            const doorFrameMaterial = new THREE.MeshStandardMaterial({ 
+            const doorFrameMaterial = new THREE.MeshStandardMaterial({
                 color: 0x000000,
                 roughness: 0.3,
                 metalness: 0.2,
                 emissive: 0x000000,
-                emissiveIntensity: 2.0, // 发出黑色"光"
-                fog: false // 不受雾影响
+                emissiveIntensity: 2.0,  // 黑色发光（矛盾美学）
+                fog: false
             });
             const doorFrame = new THREE.Mesh(doorFrameGeometry, doorFrameMaterial);
             doorFrame.position.set(0, 0, 0);
             dreamcoreDoor.add(doorFrame);
-            
-            // 门内部 - 更深的黑色，发出强烈暗光
+
+            // 门内部 - 更深的黑色
             const doorInsideGeometry = new THREE.PlaneGeometry(100, 160);
-            const doorInsideMaterial = new THREE.MeshBasicMaterial({ 
+            const doorInsideMaterial = new THREE.MeshBasicMaterial({
                 color: 0x000000,
                 side: THREE.DoubleSide,
-                fog: false // 不受雾影响
+                fog: false
             });
             const doorInside = new THREE.Mesh(doorInsideGeometry, doorInsideMaterial);
             doorInside.position.set(0, 0, 1);
             dreamcoreDoor.add(doorInside);
-            
-            // 添加黑色光晕 - 梦核风格
+
+            // 第一层黑色光晕
             const glowGeometry = new THREE.PlaneGeometry(140, 200);
-            const glowMaterial = new THREE.MeshBasicMaterial({ 
+            const glowMaterial = new THREE.MeshBasicMaterial({
                 color: 0x000000,
                 transparent: true,
                 opacity: 0.15,
                 side: THREE.DoubleSide,
-                fog: false // 不受雾影响
+                fog: false
             });
             const glow = new THREE.Mesh(glowGeometry, glowMaterial);
             glow.position.set(0, 0, -2);
             dreamcoreDoor.add(glow);
-            
-            // 添加第二层更大的黑色光晕
+
+            // 第二层黑色光晕（更大更淡）
             const glow2Geometry = new THREE.PlaneGeometry(180, 240);
-            const glow2Material = new THREE.MeshBasicMaterial({ 
+            const glow2Material = new THREE.MeshBasicMaterial({
                 color: 0x000000,
                 transparent: true,
                 opacity: 0.08,
@@ -602,17 +730,17 @@
             const glow2 = new THREE.Mesh(glow2Geometry, glow2Material);
             glow2.position.set(0, 0, -4);
             dreamcoreDoor.add(glow2);
-            
-            // 添加一些梦核风格的白色小球体装饰
+
+            // 添加白色小球装饰（与黑门对比）
             for (let i = 0; i < 3; i++) {
                 const sphereGeometry = new THREE.SphereGeometry(3, 8, 8);
-                const sphereMaterial = new THREE.MeshStandardMaterial({ 
+                const sphereMaterial = new THREE.MeshStandardMaterial({
                     color: 0xffffff,
                     emissive: 0xffffff,
                     emissiveIntensity: 0.5,
                     transparent: true,
                     opacity: 0.7,
-                    fog: false // 不受雾影响
+                    fog: false
                 });
                 const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
                 sphere.position.set(
@@ -620,44 +748,63 @@
                     (Math.random() - 0.5) * 140,
                     10 + Math.random() * 10
                 );
+                // 设置浮动参数
                 sphere.userData.floatSpeed = Math.random() * 0.02 + 0.01;
                 sphere.userData.floatOffset = Math.random() * Math.PI * 2;
                 dreamcoreDoor.add(sphere);
             }
-            
+
             // 放置在相机后方
-            dreamcoreDoor.position.set(0, 0, 400); // 门位置：调整到适中距离
+            dreamcoreDoor.position.set(0, 0, 400);
             dreamcoreDoor.visible = false;
             dreamcoreDoor.name = 'dreamcoreDoor';
             scene.add(dreamcoreDoor);
         }
 
+        /* ===========================================
+           交互事件处理函数
+           =========================================== */
+
+        /**
+         * 鼠标按下事件
+         */
         function onMouseDown(e) {
-            if (controlsLocked) return;
+            if (controlsLocked) return;  // 控制锁定时忽略
             isMouseDown = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
         }
 
+        /**
+         * 鼠标释放事件
+         */
         function onMouseUp(e) {
             isMouseDown = false;
         }
 
+        /**
+         * 鼠标移动事件
+         * 拖拽时旋转相机
+         */
         function onMouseMove(e) {
-            if (controlsLocked) return;
+            if (controlsLocked) return;  // 控制锁定时忽略
             if (isMouseDown) {
                 const deltaX = e.clientX - lastMouseX;
                 const deltaY = e.clientY - lastMouseY;
 
+                // 更新目标旋转角度
                 targetRotationY -= deltaX * 0.003;
                 targetRotationX -= deltaY * 0.003;
-                targetRotationX = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationX));
+                targetRotationX = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, targetRotationX));  // 限制上下角度
 
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
             }
         }
 
+        /**
+         * 触摸开始事件
+         */
         function onTouchStart(e) {
             if (controlsLocked) return;
             if (e.touches.length === 1) {
@@ -666,6 +813,9 @@
             }
         }
 
+        /**
+         * 触摸移动事件
+         */
         function onTouchMove(e) {
             if (controlsLocked) return;
             if (e.touches.length === 1) {
@@ -681,44 +831,64 @@
             }
         }
 
+        /**
+         * 触摸结束事件
+         */
         function onTouchEnd(e) {
         }
 
+        /**
+         * 鼠标滚轮事件
+         * 控制缩放
+         */
         function onMouseWheel(e) {
-            if (controlsLocked) return;
+            if (controlsLocked) return;  // 控制锁定时忽略
             e.preventDefault();
             const delta = e.deltaY * 0.002;
 
             // 在平面模式下
             if (zoomLevel < 0.7) {
-                // 总是可以调整视野FOV（反转方向，保持和3D一致）
-                const fovDelta = -delta * 30; // 负号反转方向：向下滚=FOV减小=放大
+                // 调整FOV（反转方向：滚轮向下=放大）
+                const fovDelta = -delta * 30;
                 targetPlaneFOV += fovDelta;
-                targetPlaneFOV = Math.max(0.1, Math.min(120, targetPlaneFOV)); // 最小0.1度，可以放得超级大
+                targetPlaneFOV = Math.max(0.1, Math.min(120, targetPlaneFOV));
 
-                // 只有在对准画面且尝试放大（delta > 0）时，才允许切换回3D
+                // 只有对准画面且尝试缩小时，才允许切换回3D
                 if (delta > 0 && canSwitchTo3D) {
                     targetZoom += delta;
-                    targetZoom = Math.max(0.1, Math.min(100.0, targetZoom)); // 增加到100倍
+                    targetZoom = Math.max(0.1, Math.min(100.0, targetZoom));
                 }
             } else {
-                // 在3D模式下正常缩放，允许放得超级大
+                // 在3D模式下正常缩放
                 targetZoom += delta;
-                targetZoom = Math.max(0.1, Math.min(100.0, targetZoom)); // 增加到100倍
+                targetZoom = Math.max(0.1, Math.min(100.0, targetZoom));
             }
         }
 
+        /**
+         * 窗口大小改变事件
+         */
         function onWindowResize() {
+            // 更新相机宽高比
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
-            
+
             renderCamera.aspect = window.innerWidth / window.innerHeight;
             renderCamera.updateProjectionMatrix();
-            
+
+            // 更新渲染器和渲染目标大小
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderTarget.setSize(window.innerWidth, window.innerHeight);
         }
 
+        /* ===========================================
+           检测函数
+           =========================================== */
+
+        /**
+         * 检测平面是否在视野中
+         * 用于判断是否可以从画廊模式切换回3D模式
+         */
         function checkPlaneInView() {
             if (!worldPlane || !worldPlane.visible) {
                 canSwitchTo3D = false;
@@ -736,19 +906,18 @@
                 new THREE.Vector3(-planeWidth/2, planeHeight/2, 0)
             ];
 
-            // 将角点转换到世界坐标系
+            // 转换到世界坐标系
             corners.forEach(corner => {
                 corner.applyMatrix4(worldPlane.matrixWorld);
             });
 
-            // 将角点投影到屏幕空间
+            // 投影到屏幕空间
             const screenCorners = corners.map(corner => {
                 const projected = corner.clone().project(camera);
-                // 转换到屏幕坐标 (0,0) 到 (width, height)
                 return {
                     x: (projected.x + 1) * window.innerWidth / 2,
                     y: (-projected.y + 1) * window.innerHeight / 2,
-                    z: projected.z // z用于判断是否在相机前方
+                    z: projected.z  // 用于判断是否在相机前方
                 };
             });
 
@@ -763,7 +932,7 @@
             // 计算平面在屏幕上的边界框
             let minX = Infinity, maxX = -Infinity;
             let minY = Infinity, maxY = -Infinity;
-            
+
             screenCorners.forEach(corner => {
                 minX = Math.min(minX, corner.x);
                 maxX = Math.max(maxX, corner.x);
@@ -777,7 +946,7 @@
             minY = Math.max(0, minY);
             maxY = Math.min(window.innerHeight, maxY);
 
-            // 计算平面占据的屏幕面积
+            // 计算平面占据的屏幕面积比例
             const planeScreenArea = (maxX - minX) * (maxY - minY);
             const totalScreenArea = window.innerWidth * window.innerHeight;
             const ratio = planeScreenArea / totalScreenArea;
@@ -787,11 +956,18 @@
             updatePositionInfo(ratio);
         }
 
+        /**
+         * 更新位置信息显示
+         * （当前为空函数，UI已隐藏）
+         */
         function updatePositionInfo(ratio) {
-            // UI已隐藏，不需要更新
             return;
         }
 
+        /**
+         * 检测门在视野中的占比
+         * 返回门占据屏幕面积的比例（0-1）
+         */
         function checkDoorInView(door, threshold = 0.5) {
             if (!door || !door.visible) return 0;
 
@@ -800,7 +976,7 @@
             const size = new THREE.Vector3();
             box.getSize(size);
 
-            // 获取门的8个角点
+            // 获取边界框的8个角点
             const corners = [
                 new THREE.Vector3(box.min.x, box.min.y, box.min.z),
                 new THREE.Vector3(box.max.x, box.min.y, box.min.z),
@@ -812,7 +988,7 @@
                 new THREE.Vector3(box.max.x, box.max.y, box.max.z)
             ];
 
-            // 将角点投影到屏幕空间
+            // 投影到屏幕空间
             const screenCorners = corners.map(corner => {
                 const projected = corner.clone().project(camera);
                 return {
@@ -849,15 +1025,25 @@
             return doorScreenArea / totalScreenArea;
         }
 
+        /* ===========================================
+           门动画系统
+           =========================================== */
+
+        /**
+         * 触发白门动画
+         */
         function triggerWhiteDoorAnimation() {
-            if (whiteDoorTriggered || isAnimatingDoor) return;
+            if (whiteDoorTriggered || isAnimatingDoor) return;  // 防止重复触发
             whiteDoorTriggered = true;
             isAnimatingDoor = true;
-            controlsLocked = true;
+            controlsLocked = true;  // 锁定控制
             currentDoorAnimation = 'white';
             animationProgress = 0;
         }
 
+        /**
+         * 触发黑门动画
+         */
         function triggerBlackDoorAnimation() {
             if (blackDoorTriggered || isAnimatingDoor) return;
             blackDoorTriggered = true;
@@ -867,33 +1053,40 @@
             animationProgress = 0;
         }
 
+        /**
+         * 更新门动画
+         * 每帧调用，根据 animationProgress 更新动画状态
+         */
         function updateDoorAnimation() {
             if (!isAnimatingDoor) return;
 
-            animationProgress += 0.008; // 动画速度
+            animationProgress += 0.008;  // 动画速度
 
             if (currentDoorAnimation === 'white') {
+                // === 白门动画 ===
                 const whiteOverlay = document.getElementById('whiteOverlay');
 
                 if (animationProgress < 1.0) {
-                    // 阶段1：白门放大并充满屏幕 (0-1)
-                    const scale = 1 + animationProgress * 50;
+                    // 阶段1：白门放大，白光充满屏幕 (0-1秒)
+                    const scale = 1 + animationProgress * 50;  // 放大到51倍
                     whiteDoor.scale.set(scale, scale, scale);
                     whiteOverlay.style.opacity = Math.min(1, animationProgress * 1.2);
+
                 } else if (animationProgress < 2.0) {
-                    // 阶段2：白光消散 (1-2)
+                    // 阶段2：白光消散 (1-2秒)
                     const fadeProgress = animationProgress - 1.0;
                     whiteOverlay.style.opacity = 1 - fadeProgress;
+
                 } else {
                     // 阶段3：返回3D世界
                     whiteOverlay.style.opacity = 0;
-                    whiteDoor.scale.set(1, 1, 1);
+                    whiteDoor.scale.set(1, 1, 1);  // 恢复原始大小
                     whiteDoor.visible = true;
 
                     // 增加白门进入次数
                     whiteDoorEnterCount++;
 
-                    // 应用世界扭曲
+                    // 应用世界扭曲效果
                     applyWorldDistortion(whiteDoorEnterCount);
 
                     // 重置相机视角到初始位置
@@ -915,51 +1108,68 @@
                     currentDoorAnimation = null;
                     animationProgress = 0;
                 }
+
             } else if (currentDoorAnimation === 'black') {
+                // === 黑门动画 ===
                 const blackOverlay = document.getElementById('blackOverlay');
                 const wokeUpText = document.getElementById('wokeUpText');
 
                 if (animationProgress < 1.0) {
-                    // 阶段1：黑门放大并充满屏幕 (0-1)
-                    const scale = 1 + animationProgress * 20;
+                    // 阶段1：黑门放大，黑色充满屏幕 (0-1秒)
+                    const scale = 1 + animationProgress * 20;  // 放大到21倍
                     dreamcoreDoor.scale.set(scale, scale, scale);
                     blackOverlay.style.opacity = Math.min(1, animationProgress * 1.2);
+
                 } else if (animationProgress < 2.5) {
-                    // 阶段2：显示"You woke up"文字 (1-2.5)
+                    // 阶段2：显示"You woke up"文字 (1-2.5秒)
                     blackOverlay.style.opacity = 1;
                     const textProgress = (animationProgress - 1.0) / 1.5;
-                    wokeUpText.style.opacity = Math.sin(textProgress * Math.PI); // 淡入淡出
+                    wokeUpText.style.opacity = Math.sin(textProgress * Math.PI);  // 正弦淡入淡出
+
                 } else {
-                    // 保持在黑屏状态
+                    // 阶段3：保持黑屏状态（游戏结束）
                     blackOverlay.style.opacity = 1;
                     wokeUpText.style.opacity = 1;
                 }
             }
         }
 
+        /**
+         * 应用世界扭曲效果
+         * 根据等级逐步增加扭曲程度
+         */
         function applyWorldDistortion(level) {
             if (level === 1) {
-                // 第一次：房子开始扭曲
+                // === 第一次进入白门 ===
+                // 房子开始扭曲
                 house.rotation.z = Math.random() * 0.3 - 0.15;
                 house.scale.set(1, 1.2, 0.9);
 
-                // 添加一些眼睛
+                // 添加3个眼睛
                 createEyes(3);
+
             } else if (level === 2) {
-                // 第二次：更多扭曲 + 天空显示DREAM
+                // === 第二次进入白门 ===
+                // 更多扭曲
                 house.rotation.z = Math.random() * 0.5 - 0.25;
                 house.scale.set(0.8, 1.4, 1.1);
 
-                // 添加更多眼睛
+                // 添加5个眼睛
                 createEyes(5);
 
                 // 天空显示DREAM文字
                 showSkyDreamText();
+
             } else if (level >= 3) {
-                // 第三次及以后：极度扭曲
+                // === 第三次及以后 ===
+                // 极度扭曲
                 house.rotation.z = Math.random() * 0.8 - 0.4;
                 house.rotation.x = Math.random() * 0.3 - 0.15;
-                house.scale.set(0.6 + Math.random() * 0.4, 1.2 + Math.random() * 0.6, 0.8 + Math.random() * 0.6);
+                house.scale.set(
+                    0.6 + Math.random() * 0.4,
+                    1.2 + Math.random() * 0.6,
+                    0.8 + Math.random() * 0.6
+                );
 
                 // 扭曲其他房子
                 scene.children.forEach(child => {
@@ -972,15 +1182,20 @@
                     }
                 });
 
+                // 添加8个眼睛
                 createEyes(8);
             }
         }
 
+        /**
+         * 创建眼睛
+         * 生成指定数量的跟随相机的眼球
+         */
         function createEyes(count) {
             for (let i = 0; i < count; i++) {
                 const eye = new THREE.Group();
 
-                // 眼白
+                // 眼白（扁球体）
                 const whiteGeometry = new THREE.SphereGeometry(0.5, 16, 16);
                 const whiteMaterial = new THREE.MeshStandardMaterial({
                     color: 0xffffff,
@@ -988,21 +1203,21 @@
                     emissiveIntensity: 0.3
                 });
                 const white = new THREE.Mesh(whiteGeometry, whiteMaterial);
-                white.scale.set(1, 0.8, 0.5);
+                white.scale.set(1, 0.8, 0.5);  // 扁平化
                 eye.add(white);
 
                 // 瞳孔
                 const pupilGeometry = new THREE.SphereGeometry(0.25, 16, 16);
                 const pupilMaterial = new THREE.MeshStandardMaterial({
                     color: 0x000000,
-                    emissive: 0x330000,
+                    emissive: 0x330000,  // 红色发光
                     emissiveIntensity: 0.5
                 });
                 const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-                pupil.position.z = 0.3;
+                pupil.position.z = 0.3;  // 放在眼白前方
                 eye.add(pupil);
 
-                // 随机位置
+                // 随机位置（圆周分布）
                 const angle = Math.random() * Math.PI * 2;
                 const distance = 5 + Math.random() * 15;
                 const height = Math.random() * 8 + 2;
@@ -1013,9 +1228,10 @@
                     Math.cos(angle) * distance
                 );
 
-                // 看向相机
+                // 初始朝向相机
                 eye.lookAt(camera.position);
 
+                // 设置眨眼参数
                 eye.userData.blinkSpeed = Math.random() * 0.02 + 0.01;
                 eye.userData.blinkOffset = Math.random() * Math.PI * 2;
 
@@ -1024,8 +1240,12 @@
             }
         }
 
+        /**
+         * 显示天空DREAM文字
+         * 使用Canvas绘制，创建3D Sprite
+         */
         function showSkyDreamText() {
-            // 如果已经创建过，不再重复创建
+            // 防止重复创建
             if (skyDreamText) return;
 
             // 创建Canvas纹理
@@ -1036,16 +1256,16 @@
 
             // 绘制DREAM文字
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.font = 'bold 300px Impact, Arial Black, sans-serif';
+            ctx.font = 'bold 300px Impact, Arial Black, sans-serif';  // 梦核字体
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            // 添加发光效果
+            // 第一层发光效果
             ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
             ctx.shadowBlur = 40;
             ctx.fillText('DREAM', canvas.width / 2, canvas.height / 2);
 
-            // 第二层发光
+            // 第二层发光效果（蓝色）
             ctx.shadowBlur = 80;
             ctx.shadowColor = 'rgba(200, 200, 255, 0.5)';
             ctx.fillText('DREAM', canvas.width / 2, canvas.height / 2);
@@ -1053,52 +1273,57 @@
             // 创建纹理
             const texture = new THREE.CanvasTexture(canvas);
 
-            // 创建精灵材质
+            // 创建Sprite材质
             const spriteMaterial = new THREE.SpriteMaterial({
                 map: texture,
                 transparent: true,
                 opacity: 0.9,
-                fog: false // 不受雾影响
+                fog: false  // 不受雾影响
             });
 
-            // 创建精灵
+            // 创建Sprite（始终面向相机）
             skyDreamText = new THREE.Sprite(spriteMaterial);
 
-            // 放置在天空中，远处高处
-            skyDreamText.position.set(0, 40, -80);
-            skyDreamText.scale.set(80, 20, 1); // 大尺寸
+            // 放置在天空高处
+            skyDreamText.position.set(0, 40, -80);  // 远处高处
+            skyDreamText.scale.set(80, 20, 1);  // 巨大尺寸
 
             scene.add(skyDreamText);
         }
 
+        /* ===========================================
+           主动画循环
+           每帧执行，更新场景和渲染
+           =========================================== */
         function animate() {
-            requestAnimationFrame(animate);
+            requestAnimationFrame(animate);  // 递归调用
 
+            // 平滑更新缩放级别
             zoomLevel += (targetZoom - zoomLevel) * 0.1;
 
-            // 如果还没准备好渲染目标或者在正常视角，渲染场景到纹理
+            /* === 渲染3D世界到纹理 === */
             if (!isRenderTargetReady || zoomLevel > 0.7) {
-                // 确保雾是正常的蓝色
+                // 设置3D世界环境
                 scene.fog.color.setHex(0x87ceeb);
                 scene.fog.near = 40;
                 scene.fog.far = 120;
-                
-                // 暂时隐藏平面和画廊元素
+
+                // 隐藏画廊元素
                 worldPlane.visible = false;
                 if (galleryLight) galleryLight.visible = false;
                 if (dreamcoreDoor) dreamcoreDoor.visible = false;
-                
-                // 确保白门在渲染到纹理时可见
+
+                // 显示白门
                 if (whiteDoor) whiteDoor.visible = true;
-                
-                // 隐藏阴影平面和画廊环境光
+
+                // 隐藏画廊专用元素
                 scene.children.forEach(function(child) {
                     if (child.name === 'shadowPlane' || child.name === 'galleryAmbient') {
                         child.visible = false;
                     }
                 });
-                
-                // 更新相机旋转
+
+                // 更新渲染相机旋转
                 currentRotationY += (targetRotationY - currentRotationY) * 0.1;
                 currentRotationX += (targetRotationX - currentRotationX) * 0.1;
 
@@ -1108,42 +1333,46 @@
                 renderCamera.rotation.x = currentRotationX;
                 renderCamera.fov = 75;
                 renderCamera.updateProjectionMatrix();
-                
-                // 临时禁用雾效果，避免渲染到纹理时泛白
+
+                // 临时禁用雾，避免纹理泛白
                 const originalFog = scene.fog;
                 scene.fog = null;
-                
+
                 // 渲染到纹理
                 renderer.setRenderTarget(renderTarget);
                 renderer.render(scene, renderCamera);
                 renderer.setRenderTarget(null);
-                
-                // 恢复雾效果
+
+                // 恢复雾
                 scene.fog = originalFog;
-                
+
                 isRenderTargetReady = true;
             }
 
-            // 根据缩放级别决定显示方式
+            /* === 根据缩放级别切换场景模式 === */
+
             if (zoomLevel < 0.7) {
+                /* --- 画廊模式 --- */
+
                 // 刚进入平面模式时，重置FOV
                 if (!wasInPlaneMode) {
                     planeFOV = 60;
                     targetPlaneFOV = 60;
                     wasInPlaneMode = true;
                 }
-                
-                // 显示平面世界（纯白空间）
+
+                // 显示画廊元素
                 worldPlane.visible = true;
                 galleryLight.visible = true;
                 dreamcoreDoor.visible = true;
-                
+
+                // 隐藏3D世界元素
                 house.visible = false;
                 ground.visible = false;
                 sky.visible = false;
                 if (whiteDoor) whiteDoor.visible = false;
-                
-                // 显示阴影平面和画廊环境光
+
+                // 显示画廊光照和阴影平面
                 scene.children.forEach(function(child) {
                     if (child.name === 'shadowPlane' || child.name === 'galleryAmbient') {
                         child.visible = true;
@@ -1161,45 +1390,47 @@
                         child.visible = false;
                     }
                 });
-                
-                // 纯白背景，雾的范围不影响门
+
+                // 纯白环境
                 renderer.setClearColor(0xffffff, 1);
                 scene.fog.color.setHex(0xffffff);
                 scene.fog.near = 100;
-                scene.fog.far = 300; // 雾的范围到300，门在400不受影响
-                
+                scene.fog.far = 300;  // 雾范围到300，黑门在400不受影响
+
                 // 平滑更新相机旋转
                 currentRotationY += (targetRotationY - currentRotationY) * 0.1;
                 currentRotationX += (targetRotationX - currentRotationX) * 0.1;
-                
-                // 用户可以旋转视角，相机往后退
+
+                // 相机后退观看平面
                 camera.position.set(0, 0, 50);
                 camera.rotation.order = 'YXZ';
                 camera.rotation.y = currentRotationY;
                 camera.rotation.x = currentRotationX;
-                
-                // 在平面模式下使用独立的FOV控制，允许自由缩放
+
+                // 使用独立的FOV控制
                 planeFOV += (targetPlaneFOV - planeFOV) * 0.1;
                 camera.fov = planeFOV;
                 camera.updateProjectionMatrix();
-                
-                // 检测平面是否占据视野的60%
+
+                // 检测平面占比
                 checkPlaneInView();
-                
+
             } else {
-                // 退出平面模式
+                /* --- 3D世界模式 --- */
+
                 wasInPlaneMode = false;
-                
+
                 // 显示3D世界
                 worldPlane.visible = false;
                 galleryLight.visible = false;
                 dreamcoreDoor.visible = false;
-                
+
                 house.visible = true;
                 ground.visible = true;
                 sky.visible = true;
                 if (whiteDoor) whiteDoor.visible = true;
-                
+
+                // 恢复3D世界元素可见性
                 scene.children.forEach(function(child) {
                     if (child.name === 'shadowPlane' || child.name === 'galleryAmbient') {
                         child.visible = false;
@@ -1217,13 +1448,14 @@
                         child.visible = true;
                     }
                 });
-                
-                // 蓝色背景
+
+                // 蓝色天空环境
                 renderer.setClearColor(0x87ceeb, 1);
                 scene.fog.color.setHex(0x87ceeb);
                 scene.fog.near = 40;
                 scene.fog.far = 120;
-                
+
+                // 平滑更新相机
                 currentRotationY += (targetRotationY - currentRotationY) * 0.1;
                 currentRotationX += (targetRotationX - currentRotationX) * 0.1;
 
@@ -1231,17 +1463,18 @@
                 camera.rotation.order = 'YXZ';
                 camera.rotation.y = currentRotationY;
                 camera.rotation.x = currentRotationX;
-                
-                // 通过FOV控制缩放，允许放得超级大
+
+                // 通过FOV控制缩放
                 const targetFov = 75 / zoomLevel;
-                camera.fov = Math.max(0.1, Math.min(120, targetFov)); // 最小0.1度，可以放得超级大
+                camera.fov = Math.max(0.1, Math.min(120, targetFov));
                 camera.updateProjectionMatrix();
-                
-                // 在3D模式下重置状态显示
+
                 updatePositionInfo(0);
             }
 
-            // 云朵移动动画
+            /* === 持续动画效果 === */
+
+            // 云朵循环移动
             scene.children.forEach(function(child) {
                 if (child.userData && child.userData.angle !== undefined) {
                     child.userData.angle += child.userData.speed;
@@ -1251,7 +1484,7 @@
                 }
             });
 
-            // 门上小球的浮动动画
+            // 黑门装饰球浮动
             if (dreamcoreDoor && dreamcoreDoor.visible) {
                 dreamcoreDoor.children.forEach(function(child) {
                     if (child.userData && child.userData.floatSpeed !== undefined) {
@@ -1261,7 +1494,7 @@
                 });
             }
 
-            // 白门小球的浮动动画
+            // 白门装饰球浮动
             if (whiteDoor && whiteDoor.visible) {
                 whiteDoor.children.forEach(function(child) {
                     if (child.userData && child.userData.floatSpeed !== undefined) {
@@ -1271,17 +1504,18 @@
                 });
             }
 
-            // 眼睛眨眼动画
+            // 眼睛眨眼和跟随相机
             eyes.forEach(function(eye) {
                 eye.userData.blinkOffset += eye.userData.blinkSpeed;
                 const blinkScale = 0.8 + Math.sin(eye.userData.blinkOffset) * 0.2;
-                eye.children[0].scale.y = blinkScale * 0.8;
+                eye.children[0].scale.y = blinkScale * 0.8;  // 眼白Y轴缩放
 
-                // 眼睛跟随相机
+                // 眼睛始终看向相机
                 eye.lookAt(camera.position);
             });
 
-            // 检测门占据视野比例
+            /* === 门触发检测 === */
+
             if (!isAnimatingDoor) {
                 // 在3D模式下检测白门（需要80%视野）
                 if (zoomLevel >= 0.7) {
@@ -1291,7 +1525,7 @@
                     }
                 }
 
-                // 在平面模式下检测黑门（需要50%视野）
+                // 在画廊模式下检测黑门（需要50%视野）
                 if (zoomLevel < 0.7) {
                     const blackDoorRatio = checkDoorInView(dreamcoreDoor);
                     if (blackDoorRatio >= 0.5) {
@@ -1300,12 +1534,14 @@
                 }
             }
 
-            // 更新门动画
+            // 更新门动画状态
             updateDoorAnimation();
 
+            // 最终渲染
             renderer.render(scene, camera);
         }
 
+        // 启动应用
         init();
     </script>
 </body>
